@@ -1,0 +1,15 @@
+README.md
+setup.py
+optcon_project.egg-info/PKG-INFO
+optcon_project.egg-info/SOURCES.txt
+optcon_project.egg-info/dependency_links.txt
+optcon_project.egg-info/requires.txt
+optcon_project.egg-info/top_level.txt
+src/__init__.py
+src/derivatives.py
+src/dynamics.py
+src/parameters.py
+src/controllers/__init__.py
+src/visualization/__init__.py
+src/visualization/animate.py
+tests/__init__.py
