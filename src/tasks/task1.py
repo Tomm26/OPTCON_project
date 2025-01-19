@@ -14,48 +14,25 @@ logger = logging.getLogger(__name__)
 
 def compute_stage_derivatives(xx, uu, xx_ref, uu_ref, lmbd_next=None):
     """
-    Compute derivatives for Newton step using Gauss-Newton approximation with scaling
+    Compute derivatives for Newton step using full second-order information
     """
-    # Get dynamics derivatives
-    fx, fu = dynamics(xx, uu)[1:3]
+    # Get all derivatives including second order
+    fx, fu, hxx, hxu, hux, huu = dynamics(xx, uu)[1:]
     
     # Get cost derivatives
-    _, stage_grad_x, stage_grad_u, _, stage_hess_uu = stagecost(
+    _, stage_grad_x, stage_grad_u, stage_hess_xx, stage_hess_uu = stagecost(
         xx, uu, xx_ref, uu_ref)
 
-    # Scale gradients if too large
-    scale = 1.0
-    if np.max(np.abs(stage_grad_u)) > 1e3:
-        scale = 1e3/np.max(np.abs(stage_grad_u))
-        stage_grad_u *= scale
-        stage_hess_uu *= scale
-    
     # Compute gradient with dynamics
-    stage_g = stage_grad_u
+    stage_g = stage_grad_u.copy()  # dimensione ni
     if lmbd_next is not None:
-        dyn_grad = fu.T @ lmbd_next
-        if np.max(np.abs(dyn_grad)) > 1e3:
-            dyn_scale = 1e3/np.max(np.abs(dyn_grad))
-            dyn_grad *= dyn_scale
-        stage_g += dyn_grad
+        stage_g += fu.T @ lmbd_next  # fu.T: ni x ns, lmbd_next: ns
+        # Ora stage_g è ni
     
-    # Compute Hessian approximation
-    stage_H = stage_hess_uu
+    # Compute Hessian with full second order term
+    stage_H = stage_hess_uu.copy()  # ni x ni
     if lmbd_next is not None:
-        gn_term = fu.T @ fu  # Gauss-Newton term
-        if np.max(np.abs(gn_term)) > 1e3:
-            gn_scale = 1e3/np.max(np.abs(gn_term))
-            gn_term *= gn_scale
-        stage_H += gn_term
-        
-        # Make sure Hessian is well-conditioned
-        eigs = np.linalg.eigvals(stage_H)
-        if np.max(np.abs(eigs)) > 1e3:
-            hess_scale = 1e3/np.max(np.abs(eigs))
-            stage_H *= hess_scale
-            
-        # Ensure symmetry
-        stage_H = 0.5 * (stage_H + stage_H.T)
+        stage_H += fu.T @ fu  # Add Gauss-Newton approximation
     
     return stage_H, stage_g
 
@@ -65,15 +42,14 @@ def run_task1():
     """
     # Optimization parameters
     max_iters = 100
-    reg_eps = 1.0  # Increased regularization
-    reg_min = 0.1  # Minimum regularization
+    reg_eps = 1e-2  # Increased from 1e-4
     term_tol = 1e-4
     
     # Armijo parameters
-    stepsize_0 = 0.01  # Smaller initial stepsize
+    stepsize_0 = 0.1  # Starting with larger steps
     cc = 0.1
-    beta = 0.5
-    armijo_maxiters = 20
+    beta = 0.7
+    armijo_maxiters = 25
     
     # Time parameters
     tf = 5.0
@@ -127,8 +103,8 @@ def run_task1():
                 stage_grad_x = stagecost(xx[:,tt,kk], uu[:,tt,kk], 
                                        xx_ref[:,tt], uu_ref[:,tt])[1]
                 
-                # Safe costate computation with clipping
                 lmbd_temp = fx.T @ lmbd[:,tt+1]
+                # Scale costate if too large
                 if np.max(np.abs(lmbd_temp)) > 1e3:
                     scale = 1e3/np.max(np.abs(lmbd_temp))
                     lmbd_temp *= scale
@@ -150,6 +126,8 @@ def run_task1():
                 grad[idx:idx+ni] = stage_g.flatten()
             
             # Add regularization
+            min_eig = np.min(np.real(np.linalg.eigvals(HH)))
+            reg_eps = max(reg_eps, -min_eig + 1e-2)
             HH_reg = HH + reg_eps * np.eye(TT*ni)
             
             # Solve KKT system
@@ -158,9 +136,9 @@ def run_task1():
                 deltau = deltau_flat.reshape(ni, TT)
                 
                 # Scale large updates
-                max_update = np.max(np.abs(deltau))
-                if max_update > 10:
-                    deltau *= (10/max_update)
+                if np.max(np.abs(deltau)) > 10:
+                    scale = 10/np.max(np.abs(deltau))
+                    deltau *= scale
                     deltau_flat = deltau.flatten()
                 
             except np.linalg.LinAlgError:
@@ -172,14 +150,13 @@ def run_task1():
             
             # Check descent direction
             descent_norm[kk] = -grad.T @ deltau_flat
-            if descent_norm[kk] > -1e-6:
+            if descent_norm[kk] > -1e-6:  # Relaxed condition
                 logger.warning(f"Weak descent direction: {descent_norm[kk]}")
-                # Fall back to scaled gradient descent
-                deltau = -grad.reshape(ni, TT)
-                if np.max(np.abs(deltau)) > 10:
-                    deltau *= 10/np.max(np.abs(deltau))
-                deltau_flat = deltau.flatten()
-                descent_norm[kk] = -grad.T @ deltau_flat
+                # Try to continue with current direction
+                if descent_norm[kk] > 0:
+                    deltau = -grad.reshape(ni, TT)  # Fall back to gradient
+                    deltau_flat = deltau.flatten()
+                    descent_norm[kk] = -grad.T @ deltau_flat
             
             # Line search
             stepsize = select_stepsize(
@@ -212,16 +189,15 @@ def run_task1():
                     logger.info(f"Converged after {kk} iterations")
                     break
                     
-                # Check relative improvement
                 if kk > 0:
                     rel_improvement = (JJ[kk-1] - JJ[kk])/max(abs(JJ[kk-1]), 1e-8)
-                    if rel_improvement < 1e-4 and kk > 20:
+                    if rel_improvement < 1e-4:
                         logger.info("Small relative improvement, stopping")
                         break
                 
                 # Adapt regularization based on progress
                 if kk > 0 and JJ[kk] < JJ[kk-1]:
-                    reg_eps = max(reg_min, reg_eps * 0.8)
+                    reg_eps = max(1e-2, reg_eps * 0.8)
             else:
                 logger.warning("Zero step size, copying previous iteration")
                 xx[:,:,kk+1] = xx[:,:,kk]
