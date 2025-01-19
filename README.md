@@ -1,84 +1,101 @@
-## README.md
-```markdown
 # Optimal Control of a Flexible Robotic Arm
 
-Questo progetto implementa strategie di controllo ottimo per un braccio robotico flessibile, modellato come un robot planare a due link con coppia applicata sul primo giunto.
+Implementation of optimal control strategies for a flexible robotic arm, modeled as a planar two-link robot with torque applied to the first joint.
 
-## Struttura del Progetto
+## Project Structure
 ```
-OPTCON_project-1/
+OPTCON_project/
 ├── src/
-│   ├── parameters.py     # Parametri di sistema e costanti
-│   ├── dynamics.py       # Implementazione della dinamica
-│   ├── derivatives.py    # Derivate simboliche per il controllo ottimo
-│   ├── visualization/
-│   │   └── animate.py    # Utility per l'animazione
-│   └── controllers/      # (Future implementazioni dei controllori)
-├── tests/               # (Test futuri)
-└── examples/           # (Esempi futuri)
+│   ├── __init__.py
+│   ├── parameters.py          # System parameters and constants
+│   ├── dynamics.py           # System dynamics implementation
+│   ├── derivatives.py        # Symbolic derivatives for optimal control
+│   ├── equilibrium.py        # Equilibrium computation and trajectory generation
+│   ├── controllers/
+│   │   ├── __init__.py
+│   │   ├── cost.py          # Cost functions and derivatives
+│   │   ├── lqr.py           # LQR solver implementation
+│   │   └── armijo.py        # Line search implementation
+│   ├── tasks/
+│   │   ├── __init__.py
+│   │   └── task1.py         # Task 1 implementation
+│   └── visualization/
+│       ├── __init__.py
+│       └── animate.py       # Robot animation utilities
+└── README.md
 ```
 
-## Requisiti
+## Requirements
 - Python 3.8+
 - NumPy
 - SciPy
 - SymPy
 - Matplotlib
+- tqdm
 
-## Installazione
+## Installation
 ```bash
-# Crea e attiva un ambiente virtuale (opzionale ma raccomandato)
 python -m venv venv
-source venv/bin/activate  # Su Windows: venv\Scripts\activate
-
-# Installa le dipendenze
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Descrizione dei Task
+## Task Implementation Status
 
-### Task 0 - Setup del Problema ✓
-- [x] Discretizzazione della dinamica
-- [x] Implementazione equazioni stato-spazio
-- [x] Implementazione funzione dinamica
-- [x] Visualizzazione base del sistema
+### Task 0 - Problem Setup ✓
+- [x] Dynamics discretization
+- [x] State-space equations
+- [x] Dynamics function implementation
+- [x] Basic visualization
 
-### Task 1 - Generazione Traiettoria (I)
-- [ ] Calcolo equilibri del sistema
-- [ ] Definizione curva di riferimento tra equilibri
-- [ ] Implementazione algoritmo di Newton per controllo ottimo
+### Task 1 - Trajectory Generation (I) ✓
+- [x] System equilibria computation
+- [x] Reference curve definition
+- [x] Newton-like algorithm implementation
+- [x] Smooth trajectory generation
+- [x] Numerical stabilization
 
-### Task 2 - Generazione Traiettoria (II)
-- [ ] Generazione curva stato-input smooth
-- [ ] Implementazione generazione traiettoria
-- [ ] Calcolo traiettoria quasi-statica
+### Task 2 - Trajectory Generation (II)
+- [ ] Smooth state-input curve generation
+- [ ] Trajectory generation implementation
+- [ ] Quasi-static trajectory computation
 
-### Task 3 - Tracking tramite LQR
-- [ ] Linearizzazione dinamica robot
-- [ ] Implementazione algoritmo LQR
-- [ ] Test con condizioni iniziali perturbate
+### Task 3 - LQR Tracking
+- [ ] Robot dynamics linearization
+- [ ] LQR algorithm implementation
+- [ ] Perturbed initial conditions testing
 
-### Task 4 - Tracking tramite MPC
-- [ ] Implementazione algoritmo MPC
-- [ ] Test performance tracking
-- [ ] Confronto con risultati LQR
+### Task 4 - MPC Tracking
+- [ ] MPC algorithm implementation
+- [ ] Tracking performance testing
+- [ ] LQR comparison
 
-### Task 5 - Animazione
-- [x] Implementazione animazione base
-- [ ] Aggiunta visualizzazione traiettoria
-- [ ] Aggiunta visualizzazione spazio delle fasi
+### Task 5 - Animation ✓
+- [x] Basic animation implementation
+- [x] Trajectory visualization
+- [ ] Phase space visualization
 
-## Uso
-Per eseguire l'animazione base:
+## Usage
+To run Task 1 (equilibrium trajectory):
 ```bash
-python src/visualization/animate.py
-```
+python -m src.tasks.task1
 ```
 
-## requirements.txt
-```
-numpy>=1.21.0
-scipy>=1.7.0
-sympy>=1.9
-matplotlib>=3.4.0
-```
+## File Description
+
+### Core Files
+- `parameters.py`: System constants and parameters
+- `dynamics.py`: Robot dynamics implementation
+- `derivatives.py`: Symbolic computation of derivatives
+- `equilibrium.py`: Equilibrium finding and trajectory generation
+
+### Controllers
+- `cost.py`: Cost functions and their derivatives
+- `lqr.py`: LTV-LQR solver with numerical stabilization
+- `armijo.py`: Line search implementation for optimization
+
+### Tasks
+- `task1.py`: Implementation of equilibrium finding and trajectory generation
+
+### Visualization
+- `animate.py`: Robot animation and trajectory visualization

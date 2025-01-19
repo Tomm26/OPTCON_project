@@ -1,0 +1,99 @@
+# Dettagli Implementazione Progetto OPTCON
+
+## Analisi dei File e Confronto con Richieste
+
+### File dal Codice del Professore
+I file forniti dal professore sono esempi di implementazione di:
+1. **Gradient Method - Scalar & Vectorial** (1_gradient_method_scalar.py, 2_gradient_method_vectorial.py)
+2. **Newton's Method** (3a_newton_method_unconstrained.py, 3b_newton_method_armijo.py, 3c_newton_method_compare.py)
+3. **QP constrained** (4b_QP_constrained.py)
+4. **SQP** (5_SQP.py, 5b_SQP_equilibria.py)
+5. **LQR e MPC** (main_dlqr_tracking.py, main_MPC.py, ecc.)
+
+Questi file sono stati usati come riferimento per l'implementazione delle tecniche di ottimizzazione e controllo.
+
+### File Sviluppati (Da Codice Esistente)
+
+1. **parameters.py**
+- Origine: Codice pre-esistente
+- Modifiche: Riorganizzazione parametri per Set 3
+- Aderenza: Conforme ai parametri richiesti nel PDF
+
+2. **dynamics.py**
+- Origine: Codice pre-esistente
+- Modifiche: 
+  * Ottimizzazione interfaccia con derivatives.py
+  * Mantenimento struttura originale
+- Aderenza: Implementa esattamente il modello del PDF
+
+3. **cost.py**
+- Origine: Codice pre-esistente
+- Modifiche:
+  * Ricalibrazione pesi per convergenza
+- Aderenza: Conforme alla struttura di costo necessaria
+
+### File Nuovi (Sviluppati da Zero usando come riferimento i codici del professore)
+
+1. **equilibrium.py**
+- Ispirato da: 5b_SQP_equilibria.py
+- Funzionalità:
+  * Calcolo equilibri (usando approccio simile a SQP)
+  * Generazione traiettoria
+- Aderenza: Task 1 come richiesto
+
+2. **derivatives.py**
+- Ispirato da: Parti analitiche nei file Newton Method
+- Funzionalità:
+  * Calcolo simbolico gradiente/hessiano
+- Aderenza: Necessario per Task 1
+
+3. **lqr.py**
+- Ispirato da: solver_ltv_LQR.py e main_dlqr_tracking.py
+- Modifiche:
+  * Aggiunta regolarizzazione
+  * Gestione errori migliorata
+- Aderenza: Parte della soluzione Newton-like richiesta
+
+4. **armijo.py**
+- Ispirato da: 2b_gradient_method_vectorial_armijo.py, 3b_newton_method_armijo.py
+- Modifiche:
+  * Adattato per il problema specifico
+- Aderenza: Parte della soluzione Newton-like richiesta
+
+5. **task1.py**
+- Ispirato da: Combinazione di vari file esempio
+- Funzionalità:
+  * Implementazione completa Task 1
+- Aderenza: Implementa esattamente quanto richiesto
+
+### File di Supporto e Visualizzazione
+
+1. **animate.py**
+- Origine: Sviluppato da zero
+- Scopo: Anticipazione Task 5
+- Extra: Non richiesto per Task 1
+
+## Note Importanti
+
+1. **Uso del Codice del Professore**
+- I file del professore sono stati usati come riferimento per:
+  * Struttura degli algoritmi di ottimizzazione
+  * Implementazione line search
+  * Gestione numerica
+  * Struttura solver LQR/MPC
+
+2. **Aderenza alle Richieste**
+- Task 0: Completato 
+- Task 1: Implementato seguendo le richieste
+  * Calcolo equilibri
+  * Definizione curva riferimento
+  * Newton's-like algorithm
+- Altri Task: In attesa
+
+3. **Metodologia di Sviluppo**
+- Studio dei file esempio del professore
+- Adattamento al problema specifico
+- Mantenimento struttura e convenzioni
+
+## Conclusioni
+L'implementazione si basa fortemente sugli esempi forniti dal professore, adattandoli al problema specifico del braccio robotico. Le tecniche di ottimizzazione e controllo sono state riprese dai file esempio e opportunamente modificate per il Task 1.
