@@ -7,6 +7,9 @@ gradient= dv.gradient
 hessian = dv.hessian
 
 def dynamics(xx, uu):
+    
+    if np.any(np.isnan(xx)) or np.any(np.isnan(uu)):
+        raise ValueError("NaN values in state or input")
 
     #xx[0], xx[1], xx[2], xx[3] = phi1, phi2, phi1', phi2'
 

@@ -3,48 +3,36 @@ from scipy.optimize import fsolve
 from .dynamics import dynamics as dyn
 
 def find_equilibrium(theta1_desired, theta2_desired):
-    """
-    Finds the equilibrium point for given desired angles.
-    Uses fsolve to find the equilibrium where accelerations are zero.
-    
-    Args:
-        theta1_desired: Desired angle for first joint
-        theta2_desired: Desired angle for second joint
-        
-    Returns:
-        x_eq: Equilibrium state [theta1, theta2, 0, 0]
-        u_eq: Required input torque at equilibrium
-    """
     def equilibrium_equations(vars):
         theta1, theta2, u = vars
-        # State at equilibrium (velocities are zero)
         x = np.array([theta1, theta2, 0, 0])
-        
-        # Get accelerations from dynamics
         x_next = dyn(x, np.array([u]))[0]
         
-        # At equilibrium, velocities should be constant (accelerations zero)
-        # and positions should match desired values
+        # Normalizza gli angoli
+        theta1_error = np.arctan2(np.sin(theta1 - theta1_desired), 
+                                np.cos(theta1 - theta1_desired))
+        theta2_error = np.arctan2(np.sin(theta2 - theta2_desired), 
+                                np.cos(theta2 - theta2_desired))
+        
         return [
-            x_next[2],                 # Zero acceleration 1
-            x_next[3],                 # Zero acceleration 2
-            theta1 - theta1_desired,   # Position error 1
+            x_next[2],  # acc1 = 0
+            x_next[3],  # acc2 = 0 
+            theta1_error  # angoli desiderati
         ]
     
-    # Initial guess - use desired angles and zero input
-    x0 = [theta1_desired, theta2_desired, 0]
+    # Usa più punti iniziali
+    x0_attempts = [
+        [theta1_desired, theta2_desired, 0],
+        [theta1_desired + 0.1, theta2_desired + 0.1, 1],
+        [theta1_desired - 0.1, theta2_desired - 0.1, -1]
+    ]
     
-    # Solve equilibrium equations
-    sol = fsolve(equilibrium_equations, x0, full_output=True)
-    
-    if sol[2] != 1:
-        raise ValueError("Could not find equilibrium - solver did not converge")
-        
-    theta1_eq, theta2_eq, u_eq = sol[0]
-    
-    x_eq = np.array([theta1_eq, theta2_eq, 0, 0])
-    
-    return x_eq, u_eq
+    for x0 in x0_attempts:
+        sol = fsolve(equilibrium_equations, x0, full_output=True)
+        if sol[2] == 1:  # Convergenza
+            return np.array([sol[0][0], sol[0][1], 0, 0]), sol[0][2]
+            
+    raise ValueError("Could not find equilibrium")
 
 def generate_reference_trajectory(x_eq_start, x_eq_end, u_eq_start, u_eq_end, T, dt):
     """

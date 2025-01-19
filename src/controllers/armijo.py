@@ -40,6 +40,11 @@ def select_stepsize(stepsize_0, armijo_maxiters, cc, beta, deltau, xx_ref, uu_re
             uu_temp[:,tt] = uu[:,tt] + stepsize*deltau[:,tt]
             xx_temp[:,tt+1] = dynamics(xx_temp[:,tt], uu_temp[:,tt])[0]
 
+        # Check for NaN or Inf in temporary solution
+        if np.any(np.isnan(xx_temp)) or np.any(np.isinf(xx_temp)) or np.any(np.isnan(uu_temp)) or np.any(np.isinf(uu_temp)):
+            stepsize *= beta
+            continue
+
         # Calculate cost with temporary solution
         JJ_temp = 0
         for tt in range(TT-1):
@@ -61,6 +66,7 @@ def select_stepsize(stepsize_0, armijo_maxiters, cc, beta, deltau, xx_ref, uu_re
 
         if ii == armijo_maxiters-1:
             print("WARNING: no stepsize found with Armijo rule!")
+            stepsize = 0  # Set stepsize to 0 as a fallback
 
     if plot:
         import matplotlib.pyplot as plt
