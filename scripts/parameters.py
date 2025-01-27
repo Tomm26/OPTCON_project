@@ -1,7 +1,7 @@
 # discretization step
-dt = 1e-3
+dt = 1e-3 #1e-2
 
-#number of states
+#number of states and number of inputs
 ns = 4
 ni = 1
 
