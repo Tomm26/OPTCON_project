@@ -10,7 +10,7 @@ x = sy.Matrix([[x1], [x2], [x3], [x4]])
 M = sy.Matrix([[a + b*sy.cos(x2), c + d*sy.cos(x2)], 
                   [c + d*sy.cos(x2), c]])
 
-C = sy.Matrix([[-d*sy.sin(x2)*(x4 + 2*x3)], 
+C = sy.Matrix([[-d*x4*sy.sin(x2)*(x4 + 2*x3)], 
                   [d*sy.sin(x2)*x3*x3]])
 
 G = sy.Matrix([[g*sy.sin(x1) + e*sy.sin(x1 + x2)],
@@ -27,7 +27,7 @@ f12 = sy.Matrix([[x3], [x4]])
 f = sy.Matrix.vstack(f12, f34)
 
 #compute gradient as transpose of jacobian
-grad = f.jacobian(x).T
+grad = f.jacobian(x)
 
 #compute the gradient wrt u
 grad_u = f.diff(u)
@@ -63,7 +63,9 @@ e = g*m2*r2
 
 def gradient(x, u):
     #x and u are numpy arrays (4,1) and (1,1)
-    return np.array(lgrad(*x, *u, a,b,c,d,f1,f2,g,e)), np.array(lgrad_u(*x, *u, a,b,c,d,f1,f2,g,e))
+    gradx = np.identity(dyn.ns) + dyn.dt * np.array(lgrad(*x, *u, a,b,c,d,f1,f2,g,e))
+    gradu = dyn.dt * np.array(lgrad_u(*x, *u, a,b,c,d,f1,f2,g,e))
+    return  gradx, gradu
 
 def hessian(x, u):
     #hessian 11, 12, 21, 22

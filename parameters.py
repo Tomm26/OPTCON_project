@@ -1,5 +1,5 @@
 # discretization step
-dt = 1e-3
+dt = 1e-2
 
 #number of states
 ns = 4

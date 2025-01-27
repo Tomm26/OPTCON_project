@@ -5,51 +5,48 @@ import cost
 import dynamics as dyn
 import lqr 
 from tqdm import tqdm
-import armijo
+import equilibrium as eq
+import trajectory as traj
+import armijo 
+
+ltv_LQR = lqr.ltv_LQR
+dynamics = dyn.dynamics
+stagecost = cost.stagecost
+termcost = cost.termcost
+select_stepsize = armijo.select_stepsize
 
 sec = 1/dt #should be a second? yes
-tf = 1 #time in seconds
+tf = 16 #time in seconds
 TT = int(tf*sec) 
-max_iters =500
+max_iters =35
 
-fixed_stepsize = 1e-3
+fixed_stepsize = 0.5
 
 # ARMIJO PARAMETERS
-Armijo = True
+Armijo = False
 stepsize_0 = 1
-cc =0.8
-beta = 0.2
+cc =0.5
+beta = 0.7
 armijo_maxiters = 20 # number of Armijo iterations
 
 #define inputs and ref
 xx_init = np.zeros((ns, TT))
 uu_init = np.zeros((ni, TT))
 
-xx_ref = []
-uu_ref = []
-
-
-for tt in range(TT):
-    if tt<TT/2:
-        xx_ref.append(np.array([np.pi/4, -np.pi/4, 0,0]))
-        uu_ref.append(np.array(dyn.g*(dyn.m1*dyn.r1 + dyn.m2*dyn.l1)*np.sin(np.pi/4)))
-    else:
-        xx_ref.append(np.array([-np.pi/4, np.pi/4, 0,0]))
-        uu_ref.append(np.array(dyn.g*(dyn.m1*dyn.r1 + dyn.m2*dyn.l1)*np.sin(-np.pi/4)))
-
-xx_ref = np.array(xx_ref).T
-uu_ref = np.array(uu_ref).reshape(ni, TT)
-
-#Starting at the same position as the xref (ie equilibrium)
-xx_init = np.repeat(xx_ref[:,0].reshape(-1,1), TT, axis=1)
-uu_init = np.repeat(uu_ref[:,0].reshape(-1,1), TT, axis=1)
+xx_ref = traj.stepFun([np.pi/8, -np.pi/8, 0,0], [-np.pi/8, np.pi/8, 0,0], TT, 6)
+uu_ref = np.array([eq.findEq(xx_ref[0, tt]) for tt in range(TT)]).reshape((ni, TT))
 
 xx = np.zeros((ns, TT, max_iters))   # state seq.
 uu = np.zeros((ni, TT, max_iters))   # input seq.
 
-xx[:,:,0] = xx_init
-uu[:,:,0] = uu_init
+#Starting at the same position as the xref (ie equilibrium)
+uu[:,:, 0] = np.repeat(uu_ref[:,0].reshape(-1,1), TT, axis=1)
 x0 = xx_ref[:,0]
+xx[:, 0,0] = x0
+
+for tt in range(1, TT-1):
+    xx[:, tt+1, 0] = dynamics(xx[:, tt, 0], uu[:, tt, 0])[0]
+
 
 JJ = np.zeros(max_iters)
 deltau = np.zeros((ni,TT, max_iters)) #descent direction
@@ -58,92 +55,73 @@ lmbd = np.zeros((ns, TT, max_iters)) # lambdas - costate seq.
 
 for kk in tqdm(range(max_iters-1)):
 
-    # compute the cost
-    for tt in range(TT-1):
-        JJ[kk]+= cost.stagecost(xx[:, tt, kk], uu[:, tt, kk], xx_ref[:, tt], uu_ref[:, tt])[0]
-
-    JJ[kk]+= cost.termcost(xx[:, -1, kk], xx_ref[:, -1])[0]
-
-    if kk%1 ==0:
-        print("cost: ", JJ[kk])
-    
-    # Descent direction calculation
-
+    # compute the cost and the direction descent
     QQt = np.zeros((ns, ns, TT))
+    RRt = np.zeros((1,1,TT))
+    SSt = np.zeros((1,ns,TT))
+    AA = np.zeros((ns,ns,TT))
+    BB = np.zeros((ns,1,TT))
+    qqt = np.zeros((ns, TT))
+    rrt = np.zeros((ni, TT))
 
-    #for the first iter approx
-    if kk < max_iters:
-        RRt = np.zeros((1,1,TT-1))
-        SSt = np.zeros((1,ns,TT-1))
-        for tt in range(TT-1):
-            QQt[:, :, tt] = cost.stagecost(xx[:, tt, kk], uu[:, tt, kk], xx_ref[:, tt], uu_ref[:, tt])[3]
-            RRt[:,:, tt] = cost.stagecost(xx[:, tt, kk], uu[:, tt, kk], xx_ref[:, tt], uu_ref[:, tt])[4]
-        
-        QQt[:, :, TT-1] = cost.termcost(xx[:,TT-1,kk], xx_ref[:,TT-1])[2]
-        
-    else:
-        lmbd[:, -1, kk] = cost.termcost(xx[:,-1,kk], xx_ref[:,-1])[1]
+    lmbda = np.zeros_like(xx)
+    grdJdu = np.zeros_like(uu)
+
     
-        #find the lambdas (solve backwards the costate equation)
-        for tt in reversed(range(TT-1)):
-            print(lmbd[:, tt+1, kk])
-            lmbd[:, tt, kk] = dyn.dynamics(xx[:, tt, kk], uu[:, tt, kk])[1] @ lmbd[:, tt+1, kk] + cost.stagecost(xx[:, tt, kk], uu[:, tt, kk], xx_ref[:, tt], uu_ref[:, tt])[1]
-        
+    JJ[kk], qqT, QQt[:, :, -1] = termcost(xx[:, -1, kk], xx_ref[:, -1])
+    lmbda[:, TT-1, kk] = qqT
 
-        #integrate backward in time (for Qt, Rt, St)
-        RRt = np.zeros((ns, ns, TT-1))
-        SSt = np.zeros((ns, ns, TT-1))
+    for tt in reversed(range(TT-1)):
+        JJtemp, qqtemp, rrtemp, QQtemp, SStemp, RRtemp = stagecost(xx[:, tt, kk], uu[:, tt, kk], xx_ref[:, tt], uu_ref[:, tt])
+        JJ[kk] += JJtemp
 
-        for tt in range(TT-1):
-            *_, hess_l_11, hess_l_22 = cost.stagecost(xx[:, tt, kk], uu[:, tt, kk], xx_ref[:, tt], uu_ref[:, tt])
-            *_, hess_f_11, hess_f_12, _, hess_f_22 = dyn.dynamics(xx[:, tt, kk], uu[:, tt, kk])
+        QQt[:, :, tt] = QQtemp
+        SSt[:, :, tt] = SStemp
+        RRt[:, :, tt] = RRtemp
+        qqt[:, tt] = qqtemp
+        rrt[:, tt] = rrtemp
 
-            QQt[:,:, tt] = hess_l_11 + hess_f_11 @ lmbd[:, tt+1, kk]
-            RRt[:,:, tt] = hess_l_22 + hess_f_22 @ lmbd[:, tt+1, kk]
-            SSt[:,:, tt] = hess_f_12 @ lmbd[:, tt+1, kk]
+        _, AA[:, :, tt], BB[:, :, tt], *_ = dynamics(xx[:, tt, kk], uu[:, tt, kk])
 
-        QQt[:,:, TT-1] = cost.termcost(xx[:,TT-1,kk], xx_ref[:,TT-1])[2]
+        lmbda[:,tt, kk] = qqt[:,tt] + AA[:,:,tt].T @ lmbda[:,tt+1, kk]
+        grdJdu[:,tt, kk] = rrt[:,tt] + BB[:,:,tt].T @ lmbda[:,tt+1, kk]
 
-    grads_fx = np.array([dyn.dynamics(xx[:, tt, kk], uu[:, tt, kk])[1] for tt in range(TT-1)]).reshape((ns,ns,TT-1))
-    grads_fu = np.array([dyn.dynamics(xx[:, tt, kk], uu[:, tt, kk])[2] for tt in range(TT-1)]).reshape((ns,1,TT-1))
-    qqin = np.array([cost.stagecost(xx[:, tt, kk], uu[:, tt, kk], xx_ref[:, tt], uu_ref[:, tt])[1] for tt in range(TT-1)]).reshape((ns,TT-1))
-    rrin = np.array([cost.stagecost(xx[:, tt, kk], uu[:, tt, kk], xx_ref[:, tt], uu_ref[:, tt])[2] for tt in range(TT-1)]).reshape((1,TT-1))
-    qqfin = cost.termcost(xx[:,TT-1,kk], xx_ref[:,TT-1])[1]
-
-    res = lqr.ltv_LQR(grads_fx, grads_fu, QQt, RRt, SSt,QQt[:,:,TT-1], TT,0,qqin, rrin, qqfin)
+    print("current cost: ", JJ[kk])
+  
+    KK, sigma, *_, deltau = ltv_LQR(AA, BB, QQt, RRt, SSt,QQt[:,:,-1], TT,np.zeros_like(x0),qqt, rrt, qqT)
     
-    #update input and state
     if Armijo:
-        for tt in range(TT-1):
-            descent_arm[kk]+= np.linalg.norm(res[-1][0,tt])**2
-
-        #print(descent_arm[kk])
-        stepsize = armijo.select_stepsize(stepsize_0, armijo_maxiters, cc, beta,
-                                res[-1], xx_ref, uu_ref, 0, 
-                                uu[:,:,kk], JJ[kk], descent_arm[kk], False)
+        
+        stepsize = select_stepsize(
+            stepsize_0, armijo_maxiters, cc, beta, deltau, xx_ref, uu_ref, x0, 
+            xx[:, :, kk], uu[:, :, kk], JJ[kk], (deltau @ grdJdu[:, :, kk].T).squeeze(), KK, sigma, TT)
     else:
         stepsize = fixed_stepsize
 
-    print(stepsize)
-    uu[:,:,kk+1] = uu[:,:, kk] + stepsize * res[-1]
-
+    #update input and state
+    
     xx[:,0,kk+1] = x0
     for tt in range(TT-1):
-        xx[:,tt+1,kk+1] = dyn.dynamics(xx[:,tt, kk+1], uu[:, tt, kk+1])[0]
+        uu[:, tt, kk+1] = uu[:, tt, kk] + KK[:, :, tt] @ (xx[:, tt, kk+1] - xx[:, tt, kk]) + stepsize * sigma[:,tt]
+        xx[:,tt+1,kk+1] = dynamics(xx[:,tt, kk+1], uu[:, tt, kk+1])[0]
 
 
 # Plotting the results
 
 # Adding labels and title
 
-plt.plot(list(range(TT)), xx_ref[0], marker='o', linestyle='-', color='r', label='ref function (theta 1 state)')
-plt.plot(list(range(TT)), xx[0, :, max_iters-1], marker='x', linestyle='--', color='b', label='opt func (theta 1 state)')
+plt.plot(list(range(TT)), xx_ref[0], color='r', label='ref function (theta 1 state)')
+plt.plot(list(range(TT)), xx[0, :, max_iters-1], color='g', label='opt func (theta 1 state)')
+
+plt.plot(list(range(TT)), xx_ref[1], color='r', label='ref function (theta 1 state)')
+plt.plot(list(range(TT)), xx[1, :, max_iters-1], color='g', label='opt func (theta 1 state)')
 # Show the plot
 plt.xlabel('time')
 plt.ylabel('theta val')
 plt.grid(True)
 plt.legend()
 plt.show()
-    
 
-
+plt.plot(list(range(TT)), xx_ref[2], color='r', label='ref function (theta 1 state)')
+plt.plot(list(range(TT)), xx[2, :, max_iters-1], color='g', label='opt func (theta 1 state)')
+plt.show()

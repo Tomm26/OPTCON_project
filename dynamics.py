@@ -35,3 +35,12 @@ def dynamics(xx, uu):
     xx_plus[3] = xx[3] + res[1] * dt
     
     return xx_plus, *gradient(xx, uu), *hessian(xx,uu)
+
+
+def getCoriolisAt(xx):
+    return np.array([[-m2*l1*r2*xx[3]*np.sin(xx[1])*(xx[3] + 2*xx[2])], 
+                  [m2*l1*r2*np.sin(xx[1])*xx[2]*xx[2]]])
+
+def getGravityAt(xx):
+    return np.array([[g*(m1*r1 + m2*l1)*np.sin(xx[0]) + g*m2*r2*np.sin(xx[0] + xx[1])],
+                  [g*m2*r2*np.sin(xx[0] + xx[1])]])

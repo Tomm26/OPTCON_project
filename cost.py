@@ -5,8 +5,8 @@ dt = dyn.dt
 ns = dyn.ns
 ni = dyn.ni
 
-QQt = 1*np.diag([10.0, 5.0, 1.0, 1.0])
-RRt = 0.1*np.eye(1)
+QQt = 12*np.diag([1.0, 1.0, 1.0, 1.0])
+RRt = 0.001*np.eye(1)
 
 def stagecost(xx,uu, xx_ref, uu_ref):
 
@@ -18,8 +18,9 @@ def stagecost(xx,uu, xx_ref, uu_ref):
 
     #hessian wrt x, u
     hess_xx = QQt
+    hess_xu = np.zeros((1,ns))
     hess_uu = RRt
-    return ll, grad_x_l, grad_u_l, hess_xx, hess_uu
+    return ll, grad_x_l, grad_u_l, hess_xx, hess_xu, hess_uu
 
 def termcost(xT, xT_ref, QQT = QQt):
     

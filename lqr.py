@@ -126,9 +126,11 @@ def ltv_LQR(AAin, BBin, QQin, RRin, SSin, QQfin, TT, x0, qqin = None, rrin = Non
     MMt_inv = np.linalg.inv(RRt + BBt.T @ PPtp @ BBt)
     mmt = rrt + BBt.T @ pptp
     
+    
     PPt = AAt.T @ PPtp @ AAt - (BBt.T@PPtp@AAt + SSt).T @ MMt_inv @ (BBt.T@PPtp@AAt + SSt) + QQt
+    
     ppt = AAt.T @ pptp - (BBt.T@PPtp@AAt + SSt).T @ MMt_inv @ mmt + qqt
-
+    
     PP[:,:,tt] = PPt
     pp[:,tt] = ppt.squeeze()
 
@@ -164,7 +166,7 @@ def ltv_LQR(AAin, BBin, QQin, RRin, SSin, QQfin, TT, x0, qqin = None, rrin = Non
 
     uu[:, tt] = KK[:,:,tt]@xx[:, tt] + sigma[:,tt]
     xx_p = AA[:,:,tt]@xx[:,tt] + BB[:,:,tt]@uu[:, tt]
-
+    
     xx[:,tt+1] = xx_p
 
     xxout = xx
