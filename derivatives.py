@@ -2,7 +2,7 @@ import sympy as sy
 import parameters as dyn
 import numpy as np
 
-x1,x2,x3,x4, u, a, b, c, d, f1, f2, g, e= sy.symbols('x1 x2 x3 x4 u a b c d f1 f2 g e')
+x1,x2,x3,x4, u, a, b, c, d, f1, f2, z, e= sy.symbols('x1 x2 x3 x4 u a b c d f1 f2 z e')
 
 x = sy.Matrix([[x1], [x2], [x3], [x4]])
 
@@ -13,7 +13,7 @@ M = sy.Matrix([[a + b*sy.cos(x2), c + d*sy.cos(x2)],
 C = sy.Matrix([[-d*x4*sy.sin(x2)*(x4 + 2*x3)], 
                   [d*sy.sin(x2)*x3*x3]])
 
-G = sy.Matrix([[g*sy.sin(x1) + e*sy.sin(x1 + x2)],
+G = sy.Matrix([[z*sy.sin(x1) + e*sy.sin(x1 + x2)],
                   [e*sy.sin(x1 + x2)]])
 
 F = sy.Matrix([[f1, 0], 
@@ -40,7 +40,7 @@ hess_ux = grad_u.jacobian(x).T
 hess_uu = grad_u.diff(u).T
 
 #lambdify the gradients
-pars = sy.Matrix([[x1], [x2], [x3], [x4], [u], [a], [b],  [c], [d],  [f1], [f2],  [g], [e]])
+pars = sy.Matrix([[x1], [x2], [x3], [x4], [u], [a], [b],  [c], [d],  [f1], [f2],  [z], [e]])
 
 lgrad = sy.lambdify(pars, grad)
 lgrad_u = sy.lambdify(pars, grad_u)
@@ -58,18 +58,18 @@ a = I1 + I2 + m1*r1*r1 + m2*(l1*l1 + r2*r2)
 b = 2*m2*l1*r2
 c = I2 + m2*r2*r2
 d = m2*l1*r2
-g = g*(m1*r1 + m2*l1)
+z = g*(m1*r1 + m2*l1)
 e = g*m2*r2
 
 def gradient(x, u):
     #x and u are numpy arrays (4,1) and (1,1)
-    gradx = np.identity(dyn.ns) + dyn.dt * np.array(lgrad(*x, *u, a,b,c,d,f1,f2,g,e))
-    gradu = dyn.dt * np.array(lgrad_u(*x, *u, a,b,c,d,f1,f2,g,e))
+    gradx = np.identity(dyn.ns) + dyn.dt * np.array(lgrad(*x, *u, a,b,c,d,f1,f2,z,e))
+    gradu = dyn.dt * np.array(lgrad_u(*x, *u, a,b,c,d,f1,f2,z,e))
     return  gradx, gradu
 
 def hessian(x, u):
     #hessian 11, 12, 21, 22
-    return (np.array([lhess_xx[i](*x, *u, a, b, c, d, f1, f2, g, e) for i in range(dyn.ns)]), 
-            np.array(lhess_xu(*x, *u, a, b, c, d, f1, f2, g, e)), 
-            np.array(lhess_ux(*x, *u, a, b, c, d, f1, f2, g, e)),
-            np.array(lhess_uu(*x, *u, a, b, c, d, f1, f2, g, e)) )
+    return (np.array([lhess_xx[i](*x, *u, a, b, c, d, f1, f2, z, e) for i in range(dyn.ns)]), 
+            np.array(lhess_xu(*x, *u, a, b, c, d, f1, f2, z, e)), 
+            np.array(lhess_ux(*x, *u, a, b, c, d, f1, f2, z, e)),
+            np.array(lhess_uu(*x, *u, a, b, c, d, f1, f2, z, e)) )

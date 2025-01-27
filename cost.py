@@ -5,8 +5,8 @@ dt = dyn.dt
 ns = dyn.ns
 ni = dyn.ni
 
-QQt = 12*np.diag([1.0, 1.0, 1.0, 1.0])
-RRt = 0.001*np.eye(1)
+QQt = 80*np.diag([1.0, 1.0, 1.0, 1.0])
+RRt = 0.01*np.eye(1)
 
 def stagecost(xx,uu, xx_ref, uu_ref):
 

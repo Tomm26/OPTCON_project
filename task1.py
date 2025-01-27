@@ -18,16 +18,16 @@ select_stepsize = armijo.select_stepsize
 sec = 1/dt #should be a second? yes
 tf = 16 #time in seconds
 TT = int(tf*sec) 
-max_iters =35
-
-fixed_stepsize = 0.5
+max_iters =14
+thresholdGrad = 1e-5
+fixed_stepsize = 1
 
 # ARMIJO PARAMETERS
-Armijo = False
+Armijo = True
 stepsize_0 = 1
 cc =0.5
 beta = 0.7
-armijo_maxiters = 20 # number of Armijo iterations
+armijo_maxiters = 15 # number of Armijo iterations
 
 #define inputs and ref
 xx_init = np.zeros((ns, TT))
@@ -53,7 +53,7 @@ deltau = np.zeros((ni,TT, max_iters)) #descent direction
 descent_arm = np.zeros(max_iters) 
 lmbd = np.zeros((ns, TT, max_iters)) # lambdas - costate seq.
 
-for kk in tqdm(range(max_iters-1)):
+for kk in range(max_iters-1):
 
     # compute the cost and the direction descent
     QQt = np.zeros((ns, ns, TT))
@@ -86,7 +86,15 @@ for kk in tqdm(range(max_iters-1)):
         lmbda[:,tt, kk] = qqt[:,tt] + AA[:,:,tt].T @ lmbda[:,tt+1, kk]
         grdJdu[:,tt, kk] = rrt[:,tt] + BB[:,:,tt].T @ lmbda[:,tt+1, kk]
 
+    normGrad = np.linalg.norm(grdJdu[:, :, kk])
+
+    print(f"\n{kk} iteration: ")
     print("current cost: ", JJ[kk])
+    print("current gradient of J (norm): ", normGrad)
+
+    if normGrad < thresholdGrad:
+        print("finished as the gradient is sufficiently small")
+        break
   
     KK, sigma, *_, deltau = ltv_LQR(AA, BB, QQt, RRt, SSt,QQt[:,:,-1], TT,np.zeros_like(x0),qqt, rrt, qqT)
     

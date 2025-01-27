@@ -12,7 +12,7 @@ import cost as cst
 import dynamics as dyn
 
 
-def select_stepsize(stepsize_0, armijo_maxiters, cc, beta, deltau, xx_ref, uu_ref,  x0, xx, uu, JJ, descent_arm, KK, sigma,TT, plot = True):
+def select_stepsize(stepsize_0, armijo_maxiters, cc, beta, deltau, xx_ref, uu_ref,  x0, xx, uu, JJ, descent_arm, KK, sigma,TT, plot = False):
 
       """
       Computes the stepsize using Armijo's rule.
