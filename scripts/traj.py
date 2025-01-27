@@ -1,224 +1,209 @@
 import numpy as np
 from scipy.interpolate import CubicSpline
+from enum import Enum
 import matplotlib.pyplot as plt
-from parameters import ns, ni
 
-class TrajectoryInterpolation:
-    """Class for interpolating state and input trajectories."""
-    
-    def __init__(self, x_waypoints, u_waypoints, waypoint_times, dt, interpolation_type='cubic'):
-        """
-        Initialize the trajectory interpolation.
-        
-        Args:
-            x_waypoints (np.ndarray): State waypoints with shape (n_waypoints, ns)
-            u_waypoints (np.ndarray): Input waypoints with shape (n_waypoints, ni)
-            waypoint_times (np.ndarray): Time points for waypoints with shape (n_waypoints,)
-            dt (float): Time step for interpolation
-            interpolation_type (str): Type of interpolation ('step', 'cubic', or 'trapezoidal')
-        """
-        self.x_waypoints = np.array(x_waypoints)
-        self.u_waypoints = np.array(u_waypoints)
-        self.waypoint_times = np.array(waypoint_times)
-        self.dt = dt
-        self.interpolation_type = interpolation_type
-        
-        # Validate inputs
-        self._validate_inputs()
-        
-        # Generate time vector
-        self.t = np.arange(self.waypoint_times[0], 
-                          self.waypoint_times[-1] + self.dt, 
-                          self.dt)
-        
-        # Perform interpolation
-        self.x_trajectory, self.u_trajectory = self._interpolate()
-        
-    def _validate_inputs(self):
-        """Validate input dimensions and parameters."""
-        # Check shapes
-        assert self.x_waypoints.shape[1] == ns, f"State dimension must be {ns}"
-        assert self.u_waypoints.shape[1] == ni, f"Input dimension must be {ni}"
-        assert self.x_waypoints.shape[0] == self.waypoint_times.shape[0], \
-            "Number of state waypoints must match number of time points"
-        assert self.u_waypoints.shape[0] == self.waypoint_times.shape[0], \
-            "Number of input waypoints must match number of time points"
-            
-        # Check time vector
-        assert np.all(np.diff(self.waypoint_times) > 0), \
-            "Time points must be strictly increasing"
-            
-        # Check interpolation type
-        assert self.interpolation_type in ['step', 'cubic', 'trapezoidal'], \
-            "Interpolation type must be 'step', 'cubic', or 'trapezoidal'"
-            
-        # Check dt
-        assert self.dt > 0, "Time step must be positive"
-        assert self.dt < self.waypoint_times[-1] - self.waypoint_times[0], \
-            "Time step must be smaller than total time span"
-            
-    def _step_interpolation(self):
-        """Perform step interpolation."""
-        x_trajectory = np.zeros((len(self.t), ns))
-        u_trajectory = np.zeros((len(self.t), ni))
-        
-        # For each time point, find the last waypoint
-        for i, t_current in enumerate(self.t):
-            idx = np.searchsorted(self.waypoint_times, t_current, side='right') - 1
-            idx = max(0, idx)  # Ensure non-negative index
-            
-            x_trajectory[i] = self.x_waypoints[idx]
-            u_trajectory[i] = self.u_waypoints[idx]
-            
-        return x_trajectory, u_trajectory
-    
-    def _cubic_interpolation(self):
-        """Perform cubic spline interpolation for states and linear for inputs."""
-        # Cubic interpolation for states
-        x_interpolators = [CubicSpline(self.waypoint_times, self.x_waypoints[:, i]) 
-                         for i in range(ns)]
-        x_trajectory = np.column_stack([x_interp(self.t) for x_interp in x_interpolators])
-        
-        # Linear interpolation for inputs to avoid oscillations
-        u_trajectory = np.zeros((len(self.t), ni))
-        for i, t_current in enumerate(self.t):
-            idx = np.searchsorted(self.waypoint_times, t_current, side='right') - 1
-            idx = min(max(0, idx), len(self.waypoint_times) - 2)
-            
-            t0 = self.waypoint_times[idx]
-            t1 = self.waypoint_times[idx + 1]
-            alpha = (t_current - t0) / (t1 - t0)
-            
-            u_trajectory[i] = (1 - alpha) * self.u_waypoints[idx] + \
-                            alpha * self.u_waypoints[idx + 1]
-        
-        return x_trajectory, u_trajectory
+class TrajectoryType(Enum):
+    EXPONENTIAL  = "exponential"
+    CUBIC        = "cubic"
+    STEP         = "step"
 
-    def _trapezoidal_interpolation(self):
-        """Perform trapezoidal interpolation."""
-        x_trajectory = np.zeros((len(self.t), ns))
-        u_trajectory = np.zeros((len(self.t), ni))
-        
-        for i, t_current in enumerate(self.t):
-            # Find the surrounding waypoints with proper boundary handling
-            idx = np.searchsorted(self.waypoint_times, t_current, side='right') - 1
-            idx = min(max(0, idx), len(self.waypoint_times) - 2)
-            
-            # Get time interval
-            t0 = self.waypoint_times[idx]
-            t1 = self.waypoint_times[idx + 1]
-            alpha = (t_current - t0) / (t1 - t0)
-            
-            # Linear interpolation for both states and inputs
-            x_trajectory[i] = (1 - alpha) * self.x_waypoints[idx] + \
-                            alpha * self.x_waypoints[idx + 1]
-            u_trajectory[i] = (1 - alpha) * self.u_waypoints[idx] + \
-                            alpha * self.u_waypoints[idx + 1]
-            
-        return x_trajectory, u_trajectory
+class TrajectoryGenerator:
+    """
+    Classe per generare e plottare traiettorie multi-dimensionali.
     
-    def _interpolate(self):
-        """Perform interpolation based on specified type."""
-        if self.interpolation_type == 'step':
-            return self._step_interpolation()
-        elif self.interpolation_type == 'trapezoidal':
-            return self._trapezoidal_interpolation()
-        elif self.interpolation_type == 'cubic':
-            return self._cubic_interpolation()
-        else:
-            raise ValueError("Invalid interpolation type")
+    Ora si assume che xPoints abbia forma (p, n) in input, 
+    cioè p punti (righe) e n dimensioni (colonne).
+    Nel costruttore, xPoints viene trasposta a (n, p).
+
+    tPoints deve avere dimensione (p,):
+       - tempi associati ai p punti
+    T  : tempo totale
+    dt : passo di campionamento
     
-    def get_trajectories(self):
-        """
-        Return interpolated trajectories and time vector.
+    Metodi di interpolazione disponibili:
+        - exponential
+        - cubic
+        - step
+    """
+
+    def __init__(self, xPoints, tPoints, T, dt):
+        # Converto in array numpy e TRASPORRE xPoints 
+        # (adesso la forma diventa (n, p) internamente)
+        self.xPoints = np.array(xPoints, dtype=float).T  
+        self.tPoints = np.array(tPoints, dtype=float)
+        self.T       = float(T)
+        self.dt      = float(dt)
+
+        # Controlli base
+        if len(self.tPoints.shape) != 1:
+            raise ValueError("tPoints deve essere un vettore monodimensionale.")
+        if len(self.xPoints.shape) != 2:
+            raise ValueError("xPoints, dopo la trasposizione, deve essere un array bidimensionale.")
         
-        Returns:
-            tuple: (time vector, state trajectory, input trajectory)
-        """
-        return self.t, self.x_trajectory, self.u_trajectory
+        p1 = self.xPoints.shape[1]
+        p2 = self.tPoints.shape[0]
+        if p1 != p2:
+            raise ValueError("Dopo la trasposizione, il numero di colonne di xPoints deve coincidere con la lunghezza di tPoints.")
         
-    def plot_trajectories(self, figsize=(15, 10)):
+        if self.tPoints[0] < 0 or self.tPoints[-1] > self.T:
+            raise ValueError("I tempi in tPoints devono essere compresi in [0, T].")
+        if self.dt <= 0:
+            raise ValueError("dt deve essere positivo.")
+
+        # Numero dimensioni e numero punti
+        self.n = self.xPoints.shape[0]  # dimensioni (righe)
+        self.p = self.xPoints.shape[1]  # punti noti (colonne)
+
+    def generate_trajectory(self, traj_type=TrajectoryType.EXPONENTIAL):
         """
-        Plot the interpolated trajectories as points.
+        Genera la traiettoria campionata (X_array, t_array) in base al tipo richiesto.
         
-        Args:
-            figsize (tuple): Figure size (width, height)
-            
-        Returns:
-            tuple: (figure, axes) for further customization if needed
+        Parametri:
+        ----------
+        traj_type : TrajectoryType
+            Uno dei valori in [EXPONENTIAL, CUBIC, STEP]
+        
+        Ritorna:
+        --------
+        (X_array, t_array) : (np.ndarray, np.ndarray)
+            X_array: matrice (n, N) di valori di x per ciascuna dimensione
+                     (n = numero dimensioni, N = numero di campioni)
+            t_array: vettore dei tempi corrispondenti (lunghezza N)
         """
-        fig, axes = plt.subplots(ns + ni, 1, figsize=figsize)
-        if ns + ni == 1:
-            axes = [axes]
-        fig.suptitle(f'Trajectory Points ({self.interpolation_type})')
+        # Vettore dei tempi regolare
+        t_array = np.arange(0, self.T, self.dt)
+        N = len(t_array)
+
+        # Matrice per i valori di x di ogni dimensione (n righe, N colonne)
+        X_array = np.zeros((self.n, N))
+
+        # Interpoliamo su ciascun intervallo [tPoints[j], tPoints[j+1]]
+        for j in range(self.p - 1):
+            t1 = self.tPoints[j]
+            t2 = self.tPoints[j+1]
+
+            idx_start = np.searchsorted(t_array, t1)
+            idx_end   = np.searchsorted(t_array, t2)
+
+            # Per ogni dimensione i
+            for i in range(self.n):
+                v1 = self.xPoints[i, j]
+                v2 = self.xPoints[i, j+1]
+
+                # Se i due punti coincidono, valore costante
+                if v1 == v2:
+                    X_array[i, idx_start:idx_end] = v1
+                else:
+                    # Calcoliamo la sotto-traiettoria (x_loc, t_loc)
+                    if traj_type == TrajectoryType.EXPONENTIAL:
+                        x_loc, _ = self._exponential_segment(t1, t2, v1, v2)
+                    elif traj_type == TrajectoryType.CUBIC:
+                        x_loc, _ = self._cubic_segment(t1, t2, v1, v2)
+                    elif traj_type == TrajectoryType.STEP:
+                        x_loc, _ = self._step_segment(t1, t2, v1, v2)
+                    else:
+                        raise ValueError("Tipo di traiettoria non riconosciuto.")
+
+                    seg_len = min(idx_end - idx_start, len(x_loc))
+                    X_array[i, idx_start:idx_start + seg_len] = x_loc[:seg_len]
+
+        # Se l'ultimo tempo definito < T, proseguiamo costante con l'ultimo valore
+        last_idx = np.searchsorted(t_array, self.tPoints[-1])
+        for i in range(self.n):
+            last_val = self.xPoints[i, -1]
+            X_array[i, last_idx:] = last_val
+
+        return X_array.T, t_array
+
+    def plot_trajectory(self, traj_type=TrajectoryType.EXPONENTIAL, show_points=True):
+        """
+        Genera la traiettoria e la plotta in sottografici distinti,
+        uno per ogni dimensione (riga) di xPoints.
         
-        # Plot states
-        for i in range(ns):
-            ax = axes[i]
-            # Plot interpolated trajectory points
-            ax.plot(self.t, self.x_trajectory[:, i], '.', markersize=8,
-                   label='Interpolated')
-            
-            ax.set_ylabel(f'State {i+1}')
+        Parametri:
+        ----------
+        traj_type   : TrajectoryType
+            Tipo di traiettoria da generare (default: EXPONENTIAL)
+        show_points : bool
+            Se True, mostra con scatter i punti noti per ogni dimensione.
+        """
+        # Generiamo la traiettoria
+        X_array, t_array = self.generate_trajectory(traj_type)
+
+        fig, axs = plt.subplots(self.n, 1, figsize=(8, 2*self.n), sharex=True)
+        # Se n == 1, axs non è una lista ma un singolo oggetto
+        if self.n == 1:
+            axs = [axs]
+
+        for i in range(self.n):
+            ax = axs[i]
+            ax.plot(t_array, X_array[i, :], label=f"Dimensione {i+1}", lw=2)
+
+            if show_points:
+                # i punti noti corrispondono a self.xPoints[i, :] 
+                ax.scatter(self.tPoints, self.xPoints[i, :],
+                           edgecolor='k', zorder=10, s=50, 
+                           label=f"Punti noti dim {i+1}")
+
+            ax.set_ylabel(f"x[{i}]")
             ax.grid(True)
             ax.legend()
-        
-        # Plot inputs
-        for i in range(ni):
-            ax = axes[ns + i]
-            # Plot interpolated trajectory points
-            ax.plot(self.t, self.u_trajectory[:, i], '.', markersize=8,
-                   label='Interpolated')
-            
-            ax.set_ylabel(f'Input {i+1}')
-            ax.grid(True)
-            ax.legend()
-        
-        # Set xlabel for bottom subplot only
-        axes[-1].set_xlabel('Time')
-        
-        # Adjust layout to prevent overlap
+
+        fig.suptitle(f"Traiettoria tipo: {traj_type.value}", fontsize=14)
+        axs[-1].set_xlabel("Tempo [s]")
         plt.tight_layout()
+        # plt.show(block=False)
+        plt.show()
+
+    def _exponential_segment(self, t1, t2, v1, v2):
+        dt_local = self.dt
+        t_loc = np.arange(t1, t2, dt_local)
+        T = (t2 - t1)
+        if T < 1e-8:
+            return (np.array([v1]), np.array([t1]))
+
+        k = 3.0 / T
+        denom = 1.0 - np.exp(-k * T)
+        x_loc = v1 + (v2 - v1) * (1 - np.exp(-k * (t_loc - t1))) / denom
+        return x_loc, t_loc
+
+    def _cubic_segment(self, t1, t2, v1, v2):
+        dt_local = self.dt
+        t_loc = np.arange(t1, t2, dt_local)
+        if (t2 - t1) < 1e-8:
+            return (np.array([v1]), np.array([t1]))
         
-        return fig, axes
+        spline = CubicSpline([t1, t2], [v1, v2], bc_type=((1, 0.0), (1, 0.0)))
+        x_loc = spline(t_loc)
+        return x_loc, t_loc
+
+    def _step_segment(self, t1, t2, v1, v2):
+        t_loc = np.arange(t1, t2, self.dt)
+        if (t2 - t1) < 1e-8:
+            return (np.array([v1]), np.array([t1]))
+
+        # Rimaniamo a v1 per tutto l'intervallo [t1, t2)
+        x_loc = np.full_like(t_loc, v1)
+        return x_loc, t_loc
 
 
+# ============== ESEMPIO D'USO ===================
 if __name__ == "__main__":
-    # Test the implementation
-    
-    # Create sample waypoints
-    t_waypoints = np.array([0, 1, 2])
-    x_waypoints = np.array([
-        [0, 0, 0, 0],  # Initial state
-        [1, 0.5, 0, 0],  # Intermediate state
-        [2, 1, 0, 0]  # Final state
-    ])
-    u_waypoints = np.array([
-        [0],  # Initial input
-        [1],  # Intermediate input
-        [0]   # Final input
-    ])
-    
-    # Test all interpolation types
-    interpolation_types = ['step', 'cubic', 'trapezoidal']
-    
-    for interp_type in interpolation_types:
-        interpolator = TrajectoryInterpolation(
-            x_waypoints, u_waypoints, t_waypoints, 
-            dt=0.1, interpolation_type=interp_type
-        )
-        
-        # Plot trajectories
-        interpolator.plot_trajectories()
-        # plt.savefig(f'{interp_type}_interpolation.png')
-        
-        # Get trajectories for printing
-        t, x, u = interpolator.get_trajectories()
-        
-        # Print first few points
-        print(f"\n{interp_type.capitalize()} Interpolation:")
-        print("Time points:", t[:5], "...")
-        print("State trajectory (first 5 points):", x[:5])
-        print("Input trajectory (first 5 points):", u[:5])
-    
-    plt.show()
+
+    xPoints = [
+        [0.0, 0.0, 0.0],   # primo punto
+        [5.0, 3.0, 1.0],   # secondo punto
+        [2.0, 0.0, 0.0]    # terzo punto
+    ]
+
+    tPoints = [0.0, 2.0, 4.0]
+
+    T  = 6.0
+    dt = 0.01
+
+    gen = TrajectoryGenerator(xPoints, tPoints, T, dt)
+
+    gen.plot_trajectory(traj_type=TrajectoryType.CUBIC)
+    gen.plot_trajectory(traj_type=TrajectoryType.STEP)
+    gen.plot_trajectory(traj_type=TrajectoryType.EXPONENTIAL)

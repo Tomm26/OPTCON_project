@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from dynamics import FlexibleRoboticArm
 from cost import Cost
-from traj import TrajectoryInterpolation
+from traj import TrajectoryGenerator, TrajectoryType
 from newton import NewtonOptimizer
 from utils import generate_initial_input_trajectory
 from parameters import dt, ns, ni
@@ -13,29 +13,23 @@ def main():
     
     # Define time horizon and waypoints for swing-up
     T = 5.0  # Total time in seconds
-    waypoint_times = np.array([0, T/2, T])
+    waypoint_times = np.array([0, T/2])
     
     # Define state waypoints for swing-up motion
     # State: [theta1, theta2, dtheta1, dtheta2]
     x_waypoints = np.array([
         [0.0, 0.0, 0.0, 0.0],  # Initial state
         [np.pi, 0.0, 0.0, 0.0],  # Vertical position
-        [np.pi, 0.0, 0.0, 0.0]  # Vertical position
     ])
-    # Define input waypoints (initial guess)
-    u_waypoints = generate_initial_input_trajectory(arm, x_waypoints)
-    
-    # Create trajectory interpolation
-    traj_interp = TrajectoryInterpolation(
-        x_waypoints, u_waypoints, waypoint_times, 
-        dt=dt, interpolation_type='step'
-    )
-    
-    # Get interpolated trajectories
-    t, x_ref, u_ref = traj_interp.get_trajectories()
 
-    traj_interp.plot_trajectories()
-    plt.show()
+    # Create trajectory interpolation
+    traj_interp = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
+
+    x_ref, _ = traj_interp.generate_trajectory(TrajectoryType.STEP)
+
+    # Define input waypoints (initial guess)
+    u_ref = generate_initial_input_trajectory(arm, x_ref)
+    
     
     # Initialize optimizer
     optimizer = NewtonOptimizer(arm)
@@ -50,7 +44,7 @@ def main():
     x_opt, u_opt, info = optimizer.solve_trajectory(
         x_ref, u_ref, x0,
         Q, R,
-        max_iters=100,
+        max_iters=10,
         tol=1e-6,
         do_plot=True
     )

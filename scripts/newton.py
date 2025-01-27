@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import trange
 
 from dynamics import FlexibleRoboticArm
 from cost import Cost
@@ -65,7 +66,7 @@ class NewtonOptimizer:
         grad_norms = []
         
         # Iterazioni
-        for iteration in range(max_iters):
+        for iteration in trange(max_iters):
             # Backward pass: ottieni costate e derivate
             lambda_, As, Bs, qs, rs, Qs, Rs = self._backward_pass(x, u, x_ref, u_ref)
             
