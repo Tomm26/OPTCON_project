@@ -8,28 +8,32 @@ from utils import generate_initial_input_trajectory
 from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni
 
 if __name__ == "__main__":
+
+    QQ = 40*np.diag([1.0, 1.0, 1.0, 1.0])
+    RR = 0.01*np.eye(1)
+    QQT = 100*np.diag([1.0, 1.0, 1.0, 1.0])
     
     # Initialize system
     arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni)
-    cost = Cost()
+    cost = Cost(QQ, RR, QQT)
     
     # Create reference trajectory
     T = 5.0  # Total time
-    waypoint_times = np.array([0, T/2])
-    x_waypoints = np.array([
-        [0.0, 0.0, 0.0, 0.0],  # Initial state
-        [np.pi, 0.0, 0.0, 0.0],  # Vertical position
-    ])
+    waypoint_times = np.array([0, T])
+    x_waypoints = np.array([[np.pi/8, -np.pi/8, 0, 0], [-np.pi/8, np.pi/8, 0, 0]])
     
     print('Generating reference trajectory...')
     traj_gen = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
-    x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.EXPONENTIAL)
+    x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.CUBIC)
     u_ref = generate_initial_input_trajectory(arm, x_ref)
     print('Reference trajectory generated.')
 
-    # # plot u_ref
-    # plt.plot(u_ref)
-    # plt.show()
+    traj_gen.plot_trajectory(TrajectoryType.CUBIC)
+    plt.plot(u_ref)
+    plt.xlabel('Time (s)')
+    plt.ylabel('Control Input (u)')
+    plt.title('Reference Control Input')
+    plt.show()
 
     # Save x0 and remove it from x_ref
     x0 = x_ref[0]

@@ -5,7 +5,7 @@ from cost import Cost
 from parameters import ns, ni, dt
 
 class NewtonOptimizer:
-    def __init__(self, arm, cost, dt=dt, fixed_stepsize=0.7, stepsize_0=1, cc=0.5, beta=0.7, armijo_maxiters=15):
+    def __init__(self, arm:FlexibleRoboticArm, cost:Cost, dt=dt, fixed_stepsize=0.7, stepsize_0=1, cc=0.5, beta=0.7, armijo_maxiters=15):
         """
         Initialize the Newton Optimizer.
         
@@ -40,9 +40,9 @@ class NewtonOptimizer:
 
     def stagecost(self, x, u, x_ref, u_ref):
         """Wrapper for stage cost that matches optimizer interface."""
-        l, grad_x, grad_u, Q, R = self.cost.stage_cost(x, u, x_ref, u_ref)
+        ll, grad_x, grad_u, Q, R = self.cost.stage_cost(x, u, x_ref, u_ref)
         S = np.zeros((ni, ns))
-        return l, grad_x, grad_u, Q, S, R
+        return ll, grad_x, grad_u, Q, S, R
 
     def termcost(self, x, x_ref):
         """Wrapper for terminal cost that matches optimizer interface."""
