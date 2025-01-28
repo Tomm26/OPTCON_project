@@ -1,265 +1,440 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from tqdm import trange
-
+from matplotlib import pyplot as plt
 from dynamics import FlexibleRoboticArm
 from cost import Cost
 from parameters import ns, ni, dt
 
 class NewtonOptimizer:
-    def __init__(self, arm: FlexibleRoboticArm):
+    def __init__(self, arm, cost, dt=dt, fixed_stepsize=0.7, stepsize_0=1, cc=0.5, beta=0.7, armijo_maxiters=15):
         """
-        Initialize Newton optimizer for trajectory optimization.
+        Initialize the Newton Optimizer.
         
         Args:
-            arm: FlexibleRoboticArm instance
-            cost_fn: Cost instance for optimization
+            arm: FlexibleRoboticArm instance for system dynamics
+            cost: Cost instance for cost calculations
+            dt: Time step for discretization
+            fixed_stepsize: Fixed step size when not using Armijo rule
+            stepsize_0: Initial step size for Armijo rule
+            cc: Armijo rule parameter
+            beta: Step size reduction factor for Armijo rule
+            armijo_maxiters: Maximum Armijo iterations
         """
         self.arm = arm
-        
-        # Parametri di Armijo
-        self.c = 0.5
-        self.beta = 0.7
-        self.max_armijo_iters = 20
-        
-    def solve_trajectory(self, 
-                         x_ref, 
-                         u_ref, 
-                         x0,
-                         Q, R,
-                         max_iters=100, 
-                         tol=1e-6, 
-                         do_plot=True):
+        self.cost = cost
+
+        self.dt = dt
+        self.stepsize_0 = stepsize_0
+        self.cc = cc
+        self.beta = beta
+        self.armijo_maxiters = armijo_maxiters
+        self.fixed_stepsize = fixed_stepsize
+
+    def dynamics(self, x, u):
+        """Wrapper for arm dynamics that returns next state and gradients."""
+
+        x_next = self.arm.discrete_dynamics(x, u)
+        grad_x, grad_u = self.arm.get_gradients(x, u)
+        hess_x, hess_u, hess_xu, hess_ux = self.arm.get_hessians(x, u)
+
+        return x_next, grad_x, grad_u, hess_x, hess_u, hess_xu, hess_ux
+
+    def stagecost(self, x, u, x_ref, u_ref):
+        """Wrapper for stage cost that matches optimizer interface."""
+        l, grad_x, grad_u, Q, R = self.cost.stage_cost(x, u, x_ref, u_ref)
+        S = np.zeros((ni, ns))
+        return l, grad_x, grad_u, Q, S, R
+
+    def termcost(self, x, x_ref):
+        """Wrapper for terminal cost that matches optimizer interface."""
+        lT, grad_x, Q = self.cost.terminal_cost(x, x_ref)
+        return lT, grad_x, Q
+
+    def select_stepsize(self, xx_ref, uu_ref, x0, xx, uu, JJ, descent_arm, 
+                       KK, sigma, TT, plot=False):
         """
-        Solve trajectory optimization problem.
+        Computes the stepsize using Armijo's rule.
+        """
+        stepsizes = []
+        costs_armijo = []
+        stepsize = self.stepsize_0
+        
+        # Main Armijo loop
+        for ii in range(self.armijo_maxiters):
+            # Temporary solution update
+            xx_temp = np.zeros((ns, TT))
+            uu_temp = np.zeros((ni, TT))
+            xx_temp[:, 0] = x0
+
+            for tt in range(TT - 1):
+                uu_temp[:, tt] = (uu[:, tt] + 
+                                KK[:, :, tt] @ (xx_temp[:, tt] - xx[:, tt]) + 
+                                stepsize * sigma[:, tt])
+                xx_temp[:, tt + 1] = self.dynamics(xx_temp[:, tt], uu_temp[:, tt])[0]
+
+            # Temporary cost calculation
+            JJ_temp = 0
+            for tt in range(TT - 1):
+                JJ_temp += self.stagecost(xx_temp[:, tt], uu_temp[:, tt],
+                                        xx_ref[:, tt], uu_ref[:, tt])[0]
+
+            temp_cost = self.termcost(xx_temp[:, -1], xx_ref[:, -1])[0]
+            JJ_temp += temp_cost
+
+            stepsizes.append(stepsize)
+            costs_armijo.append(np.min([JJ_temp, 100 * JJ]))
+
+            if JJ_temp >= JJ + self.cc * stepsize * descent_arm:
+                stepsize *= self.beta
+            else:
+                print(f'Armijo stepsize = {stepsize:.3e}')
+                break
+
+            if ii == self.armijo_maxiters - 1:
+                print("WARNING: no stepsize was found with armijo rule!")
+
+        if plot:
+            self._plot_armijo_descent(stepsize, x0, xx, uu, KK, sigma,
+                                    xx_ref, uu_ref, JJ, descent_arm,
+                                    stepsizes, costs_armijo, ns, ni, TT)
+
+        return stepsize
+
+    def _plot_armijo_descent(self, stepsize_0, x0, xx, uu, KK, sigma,
+                           xx_ref, uu_ref, JJ, descent_arm,
+                           stepsizes, costs_armijo, ns, ni, TT):
+        """
+        Plots the cost as a function of the stepsize in the Armijo rule.
+        """
+        steps = np.linspace(0, stepsize_0, int(2e1))
+        costs = np.zeros(len(steps))
+
+        for ii in range(len(steps)):
+            step = steps[ii]
+            xx_temp = np.zeros((ns, TT))
+            uu_temp = np.zeros((ni, TT))
+            xx_temp[:, 0] = x0
+
+            for tt in range(TT - 1):
+                uu_temp[:, tt] = (uu[:, tt] + 
+                                KK[:, :, tt] @ (xx_temp[:, tt] - xx[:, tt]) + 
+                                step * sigma[:, tt])
+                xx_temp[:, tt + 1] = self.dynamics(xx_temp[:, tt], uu_temp[:, tt])[0]
+
+            JJ_temp = 0
+            for tt in range(TT - 1):
+                temp_cost = self.stagecost(xx_temp[:, tt], uu_temp[:, tt],
+                                         xx_ref[:, tt], uu_ref[:, tt])[0]
+                JJ_temp += temp_cost
+
+            temp_cost = self.termcost(xx_temp[:, -1], xx_ref[:, -1])[0]
+            JJ_temp += temp_cost
+
+            costs[ii] = np.min([JJ_temp, 100 * JJ])
+
+        plt.figure(1)
+        plt.clf()
+        plt.plot(steps, costs, color='y',
+                label='$J(\\mathbf{u}^k - \\text{stepsize}\\cdot d^k)$')
+        plt.plot(steps, JJ + descent_arm * steps, color='r',
+                label='$J(\\mathbf{u}^k) + \\text{stepsize} \\cdot \\nabla J(\\mathbf{u}^k)^{\\top} d^k$')
+        plt.plot(steps, JJ + self.cc * descent_arm * steps, color='g', 
+                linestyle='dashed',
+                label='$J(\\mathbf{u}^k) + c\\cdot\\text{stepsize} \\cdot \\nabla J(\\mathbf{u}^k)^{\\top} d^k$')
+        plt.scatter(stepsizes, costs_armijo, marker='*', c='b', zorder=5)
+        plt.grid()
+        plt.xlabel('stepsize')
+        plt.legend()
+        plt.draw()
+        plt.show()
+
+    def ltv_LQR(self, AAin, BBin, QQin, RRin, SSin, QQfin, TT, x0, qqin, rrin, qqfin):
+        """
+        LTV LQR controller with affine terms.
+        """
+        # Handle 2D input matrices
+        try:
+            ns, lA = AAin.shape[1:]
+        except ValueError:
+            AAin = AAin[:, :, None]
+            ns, lA = AAin.shape[1:]
+
+        try:
+            ni, lB = BBin.shape[1:]
+        except ValueError:
+            BBin = BBin[:, :, None]
+            ni, lB = BBin.shape[1:]
+
+        try:
+            nQ, lQ = QQin.shape[1:]
+        except ValueError:
+            QQin = QQin[:, :, None]
+            nQ, lQ = QQin.shape[1:]
+
+        try:
+            nR, lR = RRin.shape[1:]
+        except ValueError:
+            RRin = RRin[:, :, None]
+            nR, lR = RRin.shape[1:]
+
+        try:
+            nSi, nSs, lS = SSin.shape
+        except ValueError:
+            SSin = SSin[:, :, None]
+            nSi, nSs, lS = SSin.shape
+
+        # Dimension checks
+        if nQ != ns:
+            raise ValueError("Matrix Q not compatible with number of states.")
+        if nR != ni:
+            raise ValueError("Matrix R not compatible with number of inputs.")
+        if (nSs != ns) or (nSi != ni):
+            raise ValueError("Matrix S not compatible with state/input dimensions.")
+
+        # Expand if necessary
+        if lA < TT: AAin = AAin.repeat(TT, axis=2)
+        if lB < TT: BBin = BBin.repeat(TT, axis=2)
+        if lQ < TT: QQin = QQin.repeat(TT, axis=2)
+        if lR < TT: RRin = RRin.repeat(TT, axis=2)
+        if lS < TT: SSin = SSin.repeat(TT, axis=2)
+
+        # Initialize arrays
+        KK = np.zeros((ni, ns, TT))
+        sigma = np.zeros((ni, TT))
+        PP = np.zeros((ns, ns, TT))
+        pp = np.zeros((ns, TT))
+        xx = np.zeros((ns, TT))
+        uu = np.zeros((ni, TT))
+        xx[:, 0] = x0
+
+        # Terminal conditions
+        PP[:, :, -1] = QQfin
+        pp[:, -1] = qqfin
+
+        # Backward pass
+        for t in reversed(range(TT - 1)):
+            AAt = AAin[:, :, t]
+            BBt = BBin[:, :, t]
+            QQt = QQin[:, :, t]
+            RRt = RRin[:, :, t]
+            SSt = SSin[:, :, t]
+            qqt = qqin[:, t][:, None]
+            rrt = rrin[:, t][:, None]
+            PP_next = PP[:, :, t + 1]
+            pp_next = pp[:, t + 1][:, None]
+
+            M_inv = np.linalg.inv(RRt + BBt.T @ PP_next @ BBt)
+            m_t = rrt + BBt.T @ pp_next
+
+            PP[:, :, t] = (
+                AAt.T @ PP_next @ AAt
+                - (BBt.T @ PP_next @ AAt + SSt).T @ M_inv @ (BBt.T @ PP_next @ AAt + SSt)
+                + QQt
+            )
+            pp[:, t] = (
+                AAt.T @ pp_next
+                - (BBt.T @ PP_next @ AAt + SSt).T @ M_inv @ m_t
+                + qqt
+            ).ravel()
+
+        # Calculate KK and sigma
+        for t in range(TT - 1):
+            AAt = AAin[:, :, t]
+            BBt = BBin[:, :, t]
+            RRt = RRin[:, :, t]
+            SSt = SSin[:, :, t]
+            PP_next = PP[:, :, t + 1]
+            pp_next = pp[:, t + 1][:, None]
+
+            M_inv = np.linalg.inv(RRt + BBt.T @ PP_next @ BBt)
+            m_t = rrin[:, t][:, None] + BBt.T @ pp_next
+
+            KK[:, :, t] = -M_inv @ (BBt.T @ PP_next @ AAt + SSt)
+            sigma[:, t] = (-M_inv @ m_t).ravel()
+
+        # Forward pass
+        for t in range(TT - 1):
+            uu[:, t] = KK[:, :, t] @ xx[:, t] + sigma[:, t]
+            xx[:, t + 1] = AAin[:, :, t] @ xx[:, t] + BBin[:, :, t] @ uu[:, t]
+
+        return KK, sigma, PP, xx, uu
+
+    def newton_optimize(self, xx_ref, uu_ref, max_iters=15, 
+                       threshold_grad=1e-4, use_armijo=True, show_plots_armijo=False):
+        """
+        Regularized Newton's method in closed-loop.
         
         Args:
-            x_ref: Reference state trajectory (T+1, ns)
-            u_ref: Reference input trajectory (T, ni)
-            x0: Initial state
-            Q: Stage state cost matrix (usata nella cost function)
-            R: Stage input cost matrix (usata nella cost function)
-            max_iters: Maximum number of iterations
-            tol: Convergence tolerance on the gradient norm
-            do_plot: Boolean per abilitare/disabilitare i plot a fine esecuzione
-        
+            xx_ref: Reference state trajectory (ns x TT)
+            uu_ref: Reference input trajectory (ni x TT)
+            max_iters: Maximum optimization iterations
+            threshold_grad: Gradient norm threshold for convergence
+            use_armijo: Whether to use Armijo line search
+            show_plots_armijo: Whether to plot Armijo line search
+            
         Returns:
-            x: optimized state trajectory (T+1, ns)
-            u: optimized input trajectory (T, ni)
-            info: dictionary with debugging information
+            xx: Optimized state trajectories
+            uu: Optimized input trajectories
         """
+        TT = xx_ref.shape[1]
+        
+        # Initialize sequences
+        xx = np.zeros((ns, TT, max_iters))
+        uu = np.zeros((ni, TT, max_iters))
 
-        self.cost_fn = Cost(Q, R)
+        # Set initial conditions
+        x0 = xx_ref[:, 0]
+        xx[:, 0, 0] = x0
+        uu[:, :, 0] = np.repeat(uu_ref[:, 0].reshape(-1, 1), TT, axis=1)
 
-        T = u_ref.shape[0]
-        
-        # Inizializza traiettorie
-        x = np.zeros((T+1, ns))
-        u = np.zeros((T, ni))
-        x[0] = x0
-        
-        # Forward pass iniziale (open-loop con u=0)
-        for t in range(T):
-            x[t+1] = self.arm.discrete_dynamics(x[t], u[t])
-        
-        costs = []
-        grad_norms = []
-        
-        # Iterazioni
-        for iteration in trange(max_iters):
-            # Backward pass: ottieni costate e derivate
-            lambda_, As, Bs, qs, rs, Qs, Rs = self._backward_pass(x, u, x_ref, u_ref)
-            
-            # Calcolo costo totale
-            cost = self._compute_cost(x, u, x_ref, u_ref)
-            costs.append(cost)
-            
-            # Gradiente w.r.t. gli input
-            grad = self._compute_gradient(lambda_, x, u, rs, Bs)
-            grad_norm = np.linalg.norm(grad)
-            grad_norms.append(grad_norm)
-            
-            # Check convergenza
-            if grad_norm < tol:
-                print(f"[INFO] Convergenza raggiunta a iterazione {iteration} (norm grad={grad_norm:.2e})")
-                break
-                
-            # Sottoproblema LQR -> guadagni e feedforward
-            K, sigma = self._solve_lqr_subproblem(As, Bs, Qs, Rs, qs, rs)
-            
-            # Ricerca Armijo
-            step_size = self._armijo_search(x, u, x_ref, u_ref, K, sigma, cost, grad)
-            
-            if step_size <= 0:
-                print("[WARNING] Armijo search fallita o direzione non di discesa. Interruzione.")
-                break
-                
-            # Aggiorno traiettoria in anello chiuso
-            x_new = np.zeros_like(x)
-            u_new = np.zeros_like(u)
-            x_new[0] = x[0].copy()
-            
-            for t in range(T):
-                u_new[t] = u[t] + K[t] @ (x_new[t] - x[t]) + step_size * sigma[t]
-                x_new[t+1] = self.arm.discrete_dynamics(x_new[t], u_new[t])
-            
-            x = x_new
-            u = u_new
-            
-        # Costruisco dizionario di info
-        info = {
-            'costs': costs,
-            'grad_norms': grad_norms,
-            'iterations': len(costs),
-            'converged': (grad_norms[-1] < tol) if grad_norms else False
-        }
-        
-        # Eventuale plot
-        if do_plot:
-            self._plot_results(costs, grad_norms, x, x_ref)
-        
-        return x, u, info
+        # Initialize first trajectory
+        for tt in range(1, TT-1):
+            xx[:, tt+1, 0] = self.dynamics(xx[:, tt, 0], uu[:, tt, 0])[0]
 
-    def _backward_pass(self, x, u, x_ref, u_ref):
-        """Compute costate and derivatives via backward pass."""
-        T = u.shape[0]
-        
-        lambda_ = np.zeros((T+1, ns))
-        As = np.zeros((T, ns, ns))
-        Bs = np.zeros((T, ns, ni))
-        Qs = np.zeros((T+1, ns, ns))
-        Rs = np.zeros((T, ni, ni))
-        qs = np.zeros((T+1, ns))
-        rs = np.zeros((T, ni))
-        
-        # Terminal cost
-        lf, qf, Qf = self.cost_fn.terminal_cost(x[-1], x_ref[-1])
-        lambda_[-1] = qf
-        Qs[-1] = Qf
-        qs[-1] = qf
-        
-        # Itero da T-1 a 0
-        for t in range(T-1, -1, -1):
-            # stage cost
-            _, qt, rt, Qt, Rt = self.cost_fn.stage_cost(x[t], u[t], x_ref[t], u_ref[t])
-            
-            # dinamica linearizzata
-            At, Bt = self.arm.get_gradients(x[t], u[t])[0:2]
-            
-            As[t] = At
-            Bs[t] = Bt
-            Qs[t] = Qt
-            Rs[t] = Rt
-            qs[t] = qt
-            rs[t] = rt
-            
-            # costate
-            lambda_[t] = qt + At.T @ lambda_[t+1]
-        
-        return lambda_, As, Bs, qs, rs, Qs, Rs
-    
-    def _solve_lqr_subproblem(self, As, Bs, Qs, Rs, qs, rs):
-        """Solve the LQR subproblem for feedback gains and feedforward."""
-        T = As.shape[0]
-        
-        K = np.zeros((T, ni, ns))
-        sigma = np.zeros((T, ni))
-        P = np.zeros((T+1, ns, ns))
-        p = np.zeros((T+1, ns))
-        
-        # terminal
-        P[-1] = Qs[-1]
-        p[-1] = qs[-1]
-        
-        # backward pass di Riccati
-        for t in range(T-1, -1, -1):
-            M = Rs[t] + Bs[t].T @ P[t+1] @ Bs[t]
-            
-            K[t] = -np.linalg.solve(M, Bs[t].T @ P[t+1] @ As[t])
-            sigma[t] = -np.linalg.solve(M, rs[t] + Bs[t].T @ p[t+1])
-            
-            P[t] = Qs[t] + As[t].T @ P[t+1] @ As[t] + K[t].T @ M @ K[t]
-            p[t] = qs[t] + As[t].T @ p[t+1] + K[t].T @ M @ sigma[t]
-            
-        return K, sigma
-    
-    def _compute_cost(self, x, u, x_ref, u_ref):
-        """Compute total trajectory cost."""
-        cost, _, _, _ = self.cost_fn.complete_cost(x, u, x_ref, u_ref)
-        return cost
-    
-    def _compute_gradient(self, lambda_, x, u, rs, Bs):
-        """Compute gradient of cost with respect to inputs."""
-        T = u.shape[0]
-        grad = np.zeros_like(u)
-        for t in range(T):
-            grad[t] = rs[t] + Bs[t].T @ lambda_[t+1]
-        return grad
-    
-    def _armijo_search(self, x, u, x_ref, u_ref, K, sigma, cost, grad):
+        JJ = np.zeros(max_iters)
+
+        for kk in range(max_iters-1):
+            # Initialize matrices
+            QQt = np.zeros((ns, ns, TT))
+            RRt = np.zeros((ni, ni, TT))
+            SSt = np.zeros((ni, ns, TT))
+            AA = np.zeros((ns, ns, TT))
+            BB = np.zeros((ns, ni, TT))
+            qqt = np.zeros((ns, TT))
+            rrt = np.zeros((ni, TT))
+            lmbda = np.zeros_like(xx)
+            grdJdu = np.zeros_like(uu)
+
+            # Terminal cost and lambda initialization
+            JJ[kk], qqT, QQt[:, :, -1] = self.termcost(xx[:, -1, kk], xx_ref[:, -1])
+            lmbda[:, TT-1, kk] = qqT
+
+            # Backward pass
+            for tt in reversed(range(TT-1)):
+                # Stage cost
+                JJtemp, qqtemp, rrtemp, QQtemp, SStemp, RRtemp = self.stagecost(
+                    xx[:, tt, kk], uu[:, tt, kk], xx_ref[:, tt], uu_ref[:, tt]
+                )
+                JJ[kk] += JJtemp
+
+                # Store matrices
+                QQt[:, :, tt] = QQtemp
+                SSt[:, :, tt] = SStemp
+                RRt[:, :, tt] = RRtemp
+                qqt[:, tt] = qqtemp
+                rrt[:, tt] = rrtemp
+
+                # Dynamics linearization
+                _, AA[:, :, tt], BB[:, :, tt], *_ = self.dynamics(xx[:, tt, kk], 
+                                                                 uu[:, tt, kk])
+
+                # Costate equation
+                lmbda[:,tt, kk] = qqt[:,tt] + AA[:,:,tt].T @ lmbda[:,tt+1, kk]
+                grdJdu[:,tt, kk] = rrt[:,tt] + BB[:,:,tt].T @ lmbda[:,tt+1, kk]
+
+            # Check convergence
+            normGrad = np.linalg.norm(grdJdu[:, :, kk])
+            print(f"\nIteration {kk}: ")
+            print("Current cost: ", JJ[kk])
+            print("Current gradient norm: ", normGrad)
+
+            if normGrad < threshold_grad:
+                print("Optimization finished: gradient norm is below threshold")
+                return xx[:, :, :kk+1], uu[:, :, :kk+1], JJ[:kk+1]
+
+            # LQR solution
+            KK, sigma, *_, deltau = self.ltv_LQR(
+                AA, BB, QQt, RRt, SSt, QQt[:,:,-1], TT, 
+                np.zeros_like(x0), qqt, rrt, qqT
+            )
+
+            # Step size selection
+            if use_armijo:
+                stepsize = self.select_stepsize(
+                    xx_ref, uu_ref, x0, xx[:, :, kk], uu[:, :, kk], 
+                    JJ[kk], (deltau @ grdJdu[:, :, kk].T).squeeze(), 
+                    KK, sigma, TT, show_plots_armijo
+                )
+            else:
+                stepsize = self.fixed_stepsize
+
+            # Forward pass: update input and state in closed-loop
+            xx[:, 0, kk+1] = x0
+            for tt in range(TT-1):
+                uu[:, tt, kk+1] = (uu[:, tt, kk] + 
+                                  KK[:, :, tt] @ (xx[:, tt, kk+1] - xx[:, tt, kk]) + 
+                                  stepsize * sigma[:, tt])
+                xx[:, tt+1, kk+1] = self.dynamics(xx[:, tt, kk+1], uu[:, tt, kk+1])[0]
+
+        print("\nOptimization finished: maximum iterations reached")
+        return xx, uu, JJ
+
+    def plot_results(self, xx, uu, xx_ref, uu_ref):
         """
-        Perform Armijo line search.
-        Returns step_size or 0.0 if fails.
+        Plot optimization results showing state and input trajectories.
+        
+        Args:
+            xx: Optimized state trajectories (ns x TT x iterations)
+            uu: Optimized input trajectories (ni x TT x iterations)
+            xx_ref: Reference state trajectory (ns x TT)
+            uu_ref: Reference input trajectory (ni x TT)
         """
-        grad_dot_sigma = np.sum(grad * sigma)
-        if grad_dot_sigma >= 0:
-            print("[WARNING] sigma not a descent direction")
-            return 0.0
+        TT = xx_ref.shape[1]
+        iterations = xx.shape[2]
+        
+        # Create figure with subplots
+        fig, axs = plt.subplots(5, 1, figsize=(12, 15))
+        fig.suptitle('Optimization Results', fontsize=16)
+        
+        # Plot state trajectories
+        state_labels = ['θ₁', 'θ₂', 'ω₁', 'ω₂']
+        for i in range(4):
+            ax = axs[i]
+            # Plot reference trajectory
+            ax.plot(range(TT), xx_ref[i], 'r--', label='Reference', linewidth=2)
             
-        step_size = 1.0
-        
-        for _ in range(self.max_armijo_iters):
-            x_new = np.zeros_like(x)
-            u_new = np.zeros_like(u)
-            x_new[0] = x[0].copy()
+            # Plot optimization iterations with increasing opacity
+            for k in range(iterations):
+                alpha = 0.2 + 0.8 * (k / (iterations - 1))
+                ax.plot(range(TT), xx[i, :, k], 'b-', alpha=alpha, linewidth=1)
             
-            try:
-                for t in range(u.shape[0]):
-                    u_new[t] = u[t] + K[t] @ (x_new[t] - x[t]) + step_size * sigma[t]
-                    x_new[t+1] = self.arm.discrete_dynamics(x_new[t], u_new[t])
-                
-                cost_new = self._compute_cost(x_new, u_new, x_ref, u_ref)
-                
-                if cost_new <= cost + self.c * step_size * grad_dot_sigma:
-                    return step_size
-                    
-            except (np.linalg.LinAlgError, RuntimeWarning):
-                print("[WARNING] Simulation failed during Armijo search.")
-                pass
-                
-            step_size *= self.beta
+            # Plot final trajectory
+            ax.plot(range(TT), xx[i, :, -1], 'g-', label='Optimized', linewidth=2)
+            
+            ax.set_xlabel('Time step')
+            ax.set_ylabel(f'{state_labels[i]}')
+            ax.grid(True)
+            ax.legend()
         
-        print("[WARNING] Armijo search failed (no suitable step found).")
-        return 0.0
-
-    def _plot_results(self, costs, grad_norms, x, x_ref):
-        """Simple plot of cost, gradient norm, and state vs reference."""
-        iters = range(len(costs))
+        # Plot input trajectory
+        ax = axs[4]
+        ax.plot(range(TT), uu_ref[0], 'r--', label='Reference', linewidth=2)
         
-        plt.figure(figsize=(10,4))
-        # Costo
-        plt.subplot(1,2,1)
-        plt.plot(iters, costs, 'b-o')
-        plt.xlabel('Iterazione')
-        plt.ylabel('Costo')
-        plt.title('Evoluzione del costo')
-        
-        # Norma del gradiente
-        plt.subplot(1,2,2)
-        plt.plot(iters, grad_norms, 'r-o')
-        plt.xlabel('Iterazione')
-        plt.ylabel('||grad||')
-        plt.title('Evoluzione della norma del gradiente')
+        # Plot optimization iterations with increasing opacity
+        for k in range(iterations):
+            alpha = 0.2 + 0.8 * (k / (iterations - 1))
+            ax.plot(range(TT), uu[0, :, k], 'b-', alpha=alpha, linewidth=1)
+            
+        ax.plot(range(TT), uu[0, :, -1], 'g-', label='Optimized', linewidth=2)
+        ax.set_xlabel('Time step')
+        ax.set_ylabel('Input torque')
+        ax.grid(True)
+        ax.legend()
         
         plt.tight_layout()
         plt.show()
+
+    def plot_convergence(self, costs):
+        """
+        Plot the convergence of the cost function over iterations.
         
-        # Stato vs Riferimento
-        plt.figure()
-        for i in range(x.shape[1]):
-            plt.plot(x[:, i], label=f'x[{i}]')
-            plt.plot(x_ref[:, i], '--', label=f'x_ref[{i}]')
-        plt.xlabel('Time step')
-        plt.title('Confronto stati vs riferimento')
-        plt.legend()
+        Args:
+            costs: Array of costs for each iteration
+        """
+        plt.figure(figsize=(10, 6))
+        plt.plot(range(len(costs)), costs, 'b-o')
+        plt.xlabel('Iteration')
+        plt.ylabel('Cost')
+        plt.title('Cost Convergence')
+        plt.grid(True)
+        plt.yscale('log')
         plt.show()

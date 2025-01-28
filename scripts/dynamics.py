@@ -245,37 +245,37 @@ if __name__ == "__main__":
     
     # Test 1: Basic dynamics
     x_next = arm.discrete_dynamics(x0, u)
-    print("Test 1 - Next state (x0 = [0, 0, 0, 0], u = 1):", x_next)
+    print("Test 1 - Next state (x0 = [0, 0, 0, 0], u = 1):\n", x_next)
     
-    # Test 2: Different initial state
-    x0 = [0.1, -0.1, 0.5, -0.5]
-    x_next = arm.discrete_dynamics(x0, u)
-    print("Test 2 - Next state (x0 = [0.1, -0.1, 0.5, -0.5], u = 1):", x_next)
+    # # Test 2: Different initial state
+    # x0 = [0.1, -0.1, 0.5, -0.5]
+    # x_next = arm.discrete_dynamics(x0, u)
+    # print("Test 2 - Next state (x0 = [0.1, -0.1, 0.5, -0.5], u = 1):", x_next)
     
-    # Test 3: Zero input torque
-    x0 = [0.0, 0.0, 0.0, 0.0]
-    u = [0.0]
-    x_next = arm.discrete_dynamics(x0, u)
-    print("Test 3 - Next state (x0 = [0, 0, 0, 0], u = 0):", x_next)
+    # # Test 3: Zero input torque
+    # x0 = [0.0, 0.0, 0.0, 0.0]
+    # u = [0.0]
+    # x_next = arm.discrete_dynamics(x0, u)
+    # print("Test 3 - Next state (x0 = [0, 0, 0, 0], u = 0):", x_next)
     
-    # Test 4: Steady-state response
-    x0 = [np.pi/4, np.pi/4, 0.0, 0.0]
-    u = [5.0]
-    x_next = arm.discrete_dynamics(x0, u)
-    print("Test 4 - Next state (x0 = [pi/4, pi/4, 0, 0], u = 5):", x_next)
+    # # Test 4: Steady-state response
+    # x0 = [np.pi/4, np.pi/4, 0.0, 0.0]
+    # u = [5.0]
+    # x_next = arm.discrete_dynamics(x0, u)
+    # print("Test 4 - Next state (x0 = [pi/4, pi/4, 0, 0], u = 5):", x_next)
     
     # Test 5: Gradients at a specific state
-    x0 = [0.2, 0.1, -0.1, 0.2]
+    x0 = [0.0, 0.0, 0.0, 0.0]
     u = [2.0]
     grad_x, grad_u = arm.get_gradients(x0, u)
-    print("Test 5 - Gradients at x0 =", x0, "and u =", u)
-    print("    Gradient wrt state (grad_x):", grad_x)
-    print("    Gradient wrt input (grad_u):", grad_u)
+    # print("Test 5 - Gradients at x0 =\n", x0, "\nand u =\n", u)
+    print("    Gradient wrt state (grad_x):\n", grad_x)
+    print("    Gradient wrt input (grad_u):\n", grad_u)
     
     # Test 6: Hessians at a specific state
     hess_x, hess_u, hess_xu, hess_ux = arm.get_hessians(x0, u)
-    print("Test 6 - Hessians at x0 =", x0, "and u =", u)
-    print("    Hessian wrt state (hess_x):", hess_x)
-    print("    Hessian wrt input (hess_u):", hess_u)
-    print("    Mixed Hessian (hess_xu):", hess_xu)
-    print("    Mixed Hessian transpose (hess_ux):", hess_ux)
+    # print("Test 6 - Hessians at x0 =\n", x0, "\nand u =\n", u)
+    print("    Hessian wrt state (hess_x):\n", hess_x)
+    print("    Hessian wrt input (hess_u):\n", hess_u)
+    print("    Mixed Hessian (hess_xu):\n", hess_xu)
+    print("    Mixed Hessian transpose (hess_ux):\n", hess_ux)

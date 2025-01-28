@@ -86,7 +86,6 @@ class TrajectoryGenerator:
             idx_start = np.searchsorted(t_array, t1)
             idx_end   = np.searchsorted(t_array, t2)
 
-            # Per ogni dimensione i
             for i in range(self.n):
                 v1 = self.xPoints[i, j]
                 v2 = self.xPoints[i, j+1]
@@ -97,14 +96,15 @@ class TrajectoryGenerator:
                 else:
                     # Calcoliamo la sotto-traiettoria (x_loc, t_loc)
                     if traj_type == TrajectoryType.EXPONENTIAL:
-                        x_loc, _ = self._exponential_segment(t1, t2, v1, v2)
+                        x_loc, t_loc = self._exponential_segment(t1, t2, v1, v2)
                     elif traj_type == TrajectoryType.CUBIC:
-                        x_loc, _ = self._cubic_segment(t1, t2, v1, v2)
+                        x_loc, t_loc = self._cubic_segment(t1, t2, v1, v2)
                     elif traj_type == TrajectoryType.STEP:
-                        x_loc, _ = self._step_segment(t1, t2, v1, v2)
+                        x_loc, t_loc = self._step_segment(t1, t2, v1, v2)
                     else:
                         raise ValueError("Tipo di traiettoria non riconosciuto.")
 
+                    # Riempiamo gli indici corrispondenti
                     seg_len = min(idx_end - idx_start, len(x_loc))
                     X_array[i, idx_start:idx_start + seg_len] = x_loc[:seg_len]
 
@@ -130,11 +130,11 @@ class TrajectoryGenerator:
         """
         # Generiamo la traiettoria
         X_array, t_array = self.generate_trajectory(traj_type)
+        X_array = X_array.T
 
         fig, axs = plt.subplots(self.n, 1, figsize=(8, 2*self.n), sharex=True)
-        # Se n == 1, axs non è una lista ma un singolo oggetto
         if self.n == 1:
-            axs = [axs]
+            axs = [axs]  # Per gestire il caso di una sola dimensione
 
         for i in range(self.n):
             ax = axs[i]
@@ -143,7 +143,7 @@ class TrajectoryGenerator:
             if show_points:
                 # i punti noti corrispondono a self.xPoints[i, :] 
                 ax.scatter(self.tPoints, self.xPoints[i, :],
-                           edgecolor='k', zorder=10, s=50, 
+                           facecolor='none', edgecolor='k', zorder=10, s=50, 
                            label=f"Punti noti dim {i+1}")
 
             ax.set_ylabel(f"x[{i}]")
@@ -153,7 +153,6 @@ class TrajectoryGenerator:
         fig.suptitle(f"Traiettoria tipo: {traj_type.value}", fontsize=14)
         axs[-1].set_xlabel("Tempo [s]")
         plt.tight_layout()
-        # plt.show(block=False)
         plt.show()
 
     def _exponential_segment(self, t1, t2, v1, v2):
@@ -191,19 +190,25 @@ class TrajectoryGenerator:
 # ============== ESEMPIO D'USO ===================
 if __name__ == "__main__":
 
+    # Abbiamo p=3 punti (righe) in n=3 dimensioni (colonne).
+    # Ciascuna riga rappresenta un punto nello spazio 3D:
     xPoints = [
-        [0.0, 0.0, 0.0],   # primo punto
-        [5.0, 3.0, 1.0],   # secondo punto
-        [2.0, 0.0, 0.0]    # terzo punto
+        [0.0, 0.0, 0.0],   # 1° punto (p=1)
+        [5.0, 3.0, 1.0],   # 2° punto (p=2)
+        [2.0, 0.0, 0.0]    # 3° punto (p=3)
     ]
 
+    # Tempi corrispondenti ai punti di cui sopra
     tPoints = [0.0, 2.0, 4.0]
 
+    # Tempo totale della traiettoria e passo di campionamento
     T  = 6.0
     dt = 0.01
 
+    # Istanzio il generatore di traiettorie
     gen = TrajectoryGenerator(xPoints, tPoints, T, dt)
 
+    # Eseguo il plot con diversi tipi di interpolazione
     gen.plot_trajectory(traj_type=TrajectoryType.CUBIC)
     gen.plot_trajectory(traj_type=TrajectoryType.STEP)
     gen.plot_trajectory(traj_type=TrajectoryType.EXPONENTIAL)

@@ -7,52 +7,47 @@ from newton import NewtonOptimizer
 from utils import generate_initial_input_trajectory
 from parameters import dt, ns, ni
 
-def main():
-    # Initialize the robotic arm system
+if __name__ == "__main__":
+    
+    # Initialize system
     arm = FlexibleRoboticArm()
+    cost = Cost()
     
-    # Define time horizon and waypoints for swing-up
-    T = 5.0  # Total time in seconds
+    # Create reference trajectory
+    T = 16.0  # Total time
     waypoint_times = np.array([0, T/2])
-    
-    # Define state waypoints for swing-up motion
-    # State: [theta1, theta2, dtheta1, dtheta2]
     x_waypoints = np.array([
         [0.0, 0.0, 0.0, 0.0],  # Initial state
         [np.pi, 0.0, 0.0, 0.0],  # Vertical position
     ])
-
-    # Create trajectory interpolation
-    traj_interp = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
-
-    x_ref, _ = traj_interp.generate_trajectory(TrajectoryType.STEP)
+    
+    traj_gen = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
+    x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.STEP)
 
     # Define input waypoints (initial guess)
     u_ref = generate_initial_input_trajectory(arm, x_ref)
-    
-    
-    # Initialize optimizer
-    optimizer = NewtonOptimizer(arm)
-    
-    # Initial state (hanging down)
-    x0 = np.array([0.0, 0.0, 0.0, 0.0])
-    Q = np.diag([12.0, 12.0, 12.0, 12.0])
-    R = np.diag([0.1])
-    
-    # Solve trajectory optimization
-    print("Optimizing trajectory...")
-    x_opt, u_opt, info = optimizer.solve_trajectory(
-        x_ref, u_ref, x0,
-        Q, R,
-        max_iters=10,
-        tol=1e-6,
-        do_plot=True
-    )
-    
-    print(f"Optimization completed in {info['iterations']} iterations")
-    print(f"Final gradient norm: {info['grad_norms'][-1]:.2e}")
-    print(f"Final cost: {info['costs'][-1]:.2e}")
-    
 
-if __name__ == "__main__":
-    main()
+    # # plot u_ref
+    # plt.plot(u_ref)
+    # plt.show()
+
+    # Save x0 and remove it from x_ref
+    x0 = x_ref[0]
+    x_ref = x_ref[1:]
+
+    x_ref = x_ref.T
+    u_ref = u_ref.T
+
+    # Initialize optimizer
+    optimizer = NewtonOptimizer(arm, cost)
+    
+    # Run optimization
+    x_optimal, u_optimal, costs = optimizer.newton_optimize(x_ref, u_ref, 
+                                            max_iters=10, 
+                                            threshold_grad=1e-3,
+                                            use_armijo=True,
+                                            show_plots_armijo=True)
+    
+    # Plot results
+    optimizer.plot_results(x_optimal, u_optimal, x_ref, u_ref)
+    optimizer.plot_convergence(costs)
