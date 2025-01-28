@@ -11,14 +11,14 @@ if __name__ == "__main__":
 
     QQ = 40*np.diag([1.0, 1.0, 1.0, 1.0])
     RR = 0.01*np.eye(1)
-    QQT = 100*np.diag([1.0, 1.0, 1.0, 1.0])
+    QQT = 10*np.diag([1.0, 1.0, 1.0, 1.0])
     
     # Initialize system
     arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni)
     cost = Cost(QQ, RR, QQT)
     
     # Create reference trajectory
-    T = 5.0  # Total time
+    T = 15.0  # Total time
     waypoint_times = np.array([0, T])
     x_waypoints = np.array([[np.pi/8, -np.pi/8, 0, 0], [-np.pi/8, np.pi/8, 0, 0]])
     
