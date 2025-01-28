@@ -5,27 +5,27 @@ from cost import Cost
 from traj import TrajectoryGenerator, TrajectoryType
 from newton import NewtonOptimizer
 from utils import generate_initial_input_trajectory
-from parameters import dt, ns, ni
+from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni
 
 if __name__ == "__main__":
     
     # Initialize system
-    arm = FlexibleRoboticArm()
+    arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni)
     cost = Cost()
     
     # Create reference trajectory
-    T = 16.0  # Total time
+    T = 5.0  # Total time
     waypoint_times = np.array([0, T/2])
     x_waypoints = np.array([
         [0.0, 0.0, 0.0, 0.0],  # Initial state
         [np.pi, 0.0, 0.0, 0.0],  # Vertical position
     ])
     
+    print('Generating reference trajectory...')
     traj_gen = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
     x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.EXPONENTIAL)
-
-    # Define input waypoints (initial guess)
     u_ref = generate_initial_input_trajectory(arm, x_ref)
+    print('Reference trajectory generated.')
 
     # # plot u_ref
     # plt.plot(u_ref)
@@ -41,6 +41,7 @@ if __name__ == "__main__":
     # Initialize optimizer
     optimizer = NewtonOptimizer(arm, cost)
     
+    print('Optimizing...')
     # Run optimization
     x_optimal, u_optimal, costs = optimizer.newton_optimize(x_ref, u_ref, 
                                             max_iters=10, 

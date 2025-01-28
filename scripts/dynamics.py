@@ -1,214 +1,265 @@
 import numpy as np
 from scipy.integrate import solve_ivp
-import sympy as sp
+import sympy as sy
+from typing import Tuple
+import numpy.typing as npt
 from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni
 
-# Define symbolic variables and matrices for gradient computation
-x1, x2, x3, x4, u, a, b, c, d, f1_sym, f2_sym, z, e = sp.symbols('x1 x2 x3 x4 u a b c d f1 f2 z e')
-x = sp.Matrix([[x1], [x2], [x3], [x4]])
-
-# Define symbolic matrices
-M = sp.Matrix([[a + b*sp.cos(x2), c + d*sp.cos(x2)],
-               [c + d*sp.cos(x2), c]])
-C = sp.Matrix([[-d*x4*sp.sin(x2)*(x4 + 2*x3)],
-               [d*sp.sin(x2)*x3*x3]])
-G = sp.Matrix([[z*sp.sin(x1) + e*sp.sin(x1 + x2)],
-               [e*sp.sin(x1 + x2)]])
-F = sp.Matrix([[f1_sym, 0],
-               [0, f2_sym]])
-U = sp.Matrix([[u], [0]])
-
-# Define dynamics
-f34 = M.inv()*(U - C - F*sp.Matrix([[x3], [x4]]) - G)
-f12 = sp.Matrix([[x3], [x4]])
-f = sp.Matrix.vstack(f12, f34)
-
-# Compute gradients
-grad = f.jacobian(x)
-grad_u = f.diff(u)
-
-# Compute Hessians
-hess_xx = [grad[:, i].jacobian(x).T for i in range(ns)]
-hess_xu = sp.Matrix([grad[:,i].diff(u) for i in range(ns)]).reshape(4,4).T
-hess_ux = grad_u.jacobian(x).T
-hess_uu = grad_u.diff(u).T
-
-# Lambdify expressions
-pars = sp.Matrix([[x1], [x2], [x3], [x4], [u], [a], [b], [c], [d], [f1_sym], [f2_sym], [z], [e]])
-lgrad = sp.lambdify(pars, grad)
-lgrad_u = sp.lambdify(pars, grad_u)
-lhess_xx = [sp.lambdify(pars, hess_xx[i]) for i in range(ns)]
-lhess_xu = sp.lambdify(pars, hess_xu)
-lhess_ux = sp.lambdify(pars, hess_ux)
-lhess_uu = sp.lambdify(pars, hess_uu)
-
 class FlexibleRoboticArm:
-    def __init__(self):
-        # System parameters
-        self.m1 = m1
-        self.m2 = m2 
-        self.l1 = l1
-        self.l2 = l2
-        self.r1 = r1
-        self.r2 = r2
-        self.I1 = I1
-        self.I2 = I2
-        self.g = g
-        self.f1 = f1
-        self.f2 = f2
-        self.dt = dt
+    def __init__(self, m1: float, m2: float, l1: float, l2: float, r1: float, r2: float, 
+                 I1: float, I2: float, g: float, f1: float, f2: float, dt: float, 
+                 ns: int = 4, ni: int = 1):
+        """
+        Initialize the Flexible Robotic Arm system with given parameters.
+        
+        Args:
+            m1, m2: Masses of links 1 and 2
+            l1, l2: Lengths of links 1 and 2
+            r1, r2: Distances to center of mass for links 1 and 2
+            I1, I2: Moments of inertia for links 1 and 2
+            g: Gravitational constant
+            f1, f2: Friction coefficients
+            dt: Time step
+            ns: Number of states (default: 4)
+            ni: Number of inputs (default: 1)
+        """
+        self.params = {
+            'm1': m1, 'm2': m2, 'l1': l1, 'l2': l2, 
+            'r1': r1, 'r2': r2, 'I1': I1, 'I2': I2,
+            'g': g, 'f1': f1, 'f2': f2, 'dt': dt
+        }
         self.ns = ns
         self.ni = ni
+        
+        # Pre-compute constant system parameters
+        self._compute_system_constants()
+        
+        # Initialize symbolic variables for gradients and hessians
+        self._init_symbolic_vars()
 
-    def mass_matrix(self, theta2):
-        """Compute mass matrix M(theta)."""
+    def _compute_system_constants(self) -> None:
+        """Pre-compute constant parameters used in dynamics calculations."""
+        self._a = (self.params['I1'] + self.params['I2'] + 
+                  self.params['m1'] * self.params['r1']**2 + 
+                  self.params['m2'] * (self.params['l1']**2 + self.params['r2']**2))
+        self._b = 2 * self.params['m2'] * self.params['l1'] * self.params['r2']
+        self._c = self.params['I2'] + self.params['m2'] * self.params['r2']**2
+        self._d = self.params['m2'] * self.params['l1'] * self.params['r2']
+        self._z = self.params['g'] * (self.params['m1'] * self.params['r1'] + 
+                                    self.params['m2'] * self.params['l1'])
+        self._e = self.params['g'] * self.params['m2'] * self.params['r2']
+        self._friction_matrix = np.diag([self.params['f1'], self.params['f2']])
+
+    def mass_matrix(self, theta2: float) -> npt.NDArray[np.float64]:
+        """
+        Compute mass matrix M(theta) with caching for repeated calculations.
+        
+        Args:
+            theta2: Second joint angle
+            
+        Returns:
+            2x2 mass matrix
+        """
+        cos_theta2 = np.cos(theta2)
         M = np.zeros((2, 2))
-        M[0,0] = (self.I1 + self.I2 + self.m1*self.r1**2 +
-                  self.m2*(self.l1**2 + self.r2**2) +
-                  2*self.m2*self.l1*self.r2*np.cos(theta2))
-        M[0,1] = self.I2 + self.m2*self.r2**2 + self.m2*self.l1*self.r2*np.cos(theta2)
-        M[1,0] = M[0,1]
-        M[1,1] = self.I2 + self.m2*self.r2**2
+        M[0, 0] = self._a + self._b * cos_theta2
+        M[0, 1] = M[1, 0] = self._c + self._d * cos_theta2
+        M[1, 1] = self._c
         return M
 
-    def coriolis_vector(self, theta2, dtheta1, dtheta2):
-        """Compute Coriolis vector C(theta,dtheta)."""
-        C = np.zeros(2)
-        C[0] = -self.m2*self.l1*self.r2*dtheta2*np.sin(theta2)*(dtheta2 + 2*dtheta1)
-        C[1] = self.m2*self.l1*self.r2*np.sin(theta2)*dtheta1**2
-        return C
+    def coriolis_vector(self, theta2: float, dtheta1: float, dtheta2: float) -> npt.NDArray[np.float64]:
+        """
+        Compute Coriolis vector C(theta,dtheta).
+        
+        Args:
+            theta2: Second joint angle
+            dtheta1, dtheta2: Joint angular velocities
+            
+        Returns:
+            2D Coriolis vector
+        """
+        sin_theta2 = np.sin(theta2)
+        return np.array([
+            -self._d * sin_theta2 * dtheta2 * (dtheta2 + 2 * dtheta1),
+            self._d * sin_theta2 * dtheta1**2
+        ])
 
-    def gravity_vector(self, theta1, theta2):
-        """Compute gravity vector G(theta)."""
-        G = np.zeros(2)
-        G[0] = (self.g*(self.m1*self.r1 + self.m2*self.l1)*np.sin(theta1) +
-                self.g*self.m2*self.r2*np.sin(theta1 + theta2))
-        G[1] = self.g*self.m2*self.r2*np.sin(theta1 + theta2)
-        return G
+    def gravity_vector(self, theta1: float, theta2: float) -> npt.NDArray[np.float64]:
+        """
+        Compute gravity vector G(theta).
+        
+        Args:
+            theta1, theta2: Joint angles
+            
+        Returns:
+            2D gravity vector
+        """
+        sin_theta1 = np.sin(theta1)
+        sin_sum = np.sin(theta1 + theta2)
+        return np.array([
+            self._z * sin_theta1 + self._e * sin_sum,
+            self._e * sin_sum
+        ])
 
-    def friction_matrix(self):
-        """Compute friction matrix F."""
-        return np.diag([self.f1, self.f2])
-
-    def continuous_dynamics(self, x, u):
-        """Compute continuous time dynamics."""
+    def continuous_dynamics(self, x: npt.NDArray[np.float64], 
+                          u: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        """
+        Compute continuous time dynamics efficiently.
+        
+        Args:
+            x: State vector [theta1, theta2, dtheta1, dtheta2]
+            u: Control input [u1]
+            
+        Returns:
+            State derivative vector
+        """
         theta1, theta2, dtheta1, dtheta2 = x
+        
+        # Get dynamics components
         M = self.mass_matrix(theta2)
         C = self.coriolis_vector(theta2, dtheta1, dtheta2)
         G = self.gravity_vector(theta1, theta2)
-        F = self.friction_matrix()
         
+        # Compute acceleration
         ddtheta = np.linalg.solve(
             M,
-            np.array([u[0], 0]) - C - F@np.array([dtheta1, dtheta2]) - G
+            np.array([u[0], 0]) - C - self._friction_matrix @ np.array([dtheta1, dtheta2]) - G
         )
+        
         return np.array([dtheta1, dtheta2, ddtheta[0], ddtheta[1]])
 
-    def discrete_dynamics(self, x, u, method='euler'):
-        """Compute discrete time dynamics using the specified integration method.
+    def discrete_dynamics(self, x: npt.NDArray[np.float64], 
+                        u: npt.NDArray[np.float64], 
+                        method: str = 'rk45') -> npt.NDArray[np.float64]:
+        """
+        Compute discrete time dynamics using specified integration method.
         
-        Parameters:
-        x (array-like): State vector [theta1, theta2, dtheta1, dtheta2]
-        u (array-like): Control input [u1]
-        method (str): Integration method, 'euler' or 'rk45'. Default is 'euler'.
-        
+        Args:
+            x: State vector
+            u: Control input
+            method: Integration method ('euler' or 'rk45')
+            
         Returns:
-        np.ndarray: Next state vector
+            Next state vector
         """
         if method == 'euler':
-            dx = self.continuous_dynamics(x, u)
-            return np.array(x) + self.dt * dx
-        
+            return x + self.params['dt'] * self.continuous_dynamics(x, u)
         elif method == 'rk45':
-            def system(t, x):
-                return self.continuous_dynamics(x, u)
-                
             sol = solve_ivp(
-                system,
-                t_span=[0, self.dt],
+                lambda t, x: self.continuous_dynamics(x, u),
+                t_span=[0, self.params['dt']],
                 y0=x,
-                method='RK45'
+                method='RK45',
+                rtol=1e-6,
+                atol=1e-6
             )
             return sol.y[:, -1]
         else:
             raise ValueError("Unsupported integration method. Choose 'euler' or 'rk45'.")
 
-    def get_gradients(self, x, u):
+    def _init_symbolic_vars(self) -> None:
+        """Initialize symbolic variables for gradient and Hessian computation."""
+        # Create symbolic variables
+        self._sym_vars = sy.symbols('x1 x2 x3 x4 u a b c d f1 f2 z e')
+        x1, x2, x3, x4, u, a, b, c, d, f1, f2, z, e = self._sym_vars
+        
+        # Create state vector
+        x = sy.Matrix([[x1], [x2], [x3], [x4]])
+        
+        # Define symbolic matrices
+        M = sy.Matrix([[a + b*sy.cos(x2), c + d*sy.cos(x2)], 
+                      [c + d*sy.cos(x2), c]])
+        C = sy.Matrix([[-d*x4*sy.sin(x2)*(x4 + 2*x3)], 
+                      [d*sy.sin(x2)*x3*x3]])
+        G = sy.Matrix([[z*sy.sin(x1) + e*sy.sin(x1 + x2)],
+                      [e*sy.sin(x1 + x2)]])
+        F = sy.Matrix([[f1, 0], [0, f2]])
+        U = sy.Matrix([[u], [0]])
+        
+        # Compute dynamics
+        f34 = M.inv()*(U - C - F*sy.Matrix([[x3], [x4]]) - G)
+        f12 = sy.Matrix([[x3], [x4]])
+        self._sym_f = sy.Matrix.vstack(f12, f34)
+        
+        # Pre-compute gradients
+        self._sym_grad = self._sym_f.jacobian(x)
+        self._sym_grad_u = self._sym_f.diff(u)
+        
+        # Pre-compute Hessians
+        self._sym_hess_xx = [self._sym_grad[:, i].jacobian(x).T for i in range(self.ns)]
+        self._sym_hess_xu = sy.Matrix([self._sym_grad[:,i].diff(u) for i in range(self.ns)]).reshape(4,4).T
+        self._sym_hess_ux = self._sym_grad_u.jacobian(x).T
+        self._sym_hess_uu = self._sym_grad_u.diff(u).T
+        
+        # Create lambdified functions
+        self._create_lambda_functions()
+
+    def _create_lambda_functions(self) -> None:
+        """Create lambda functions for gradients and Hessians."""
+        pars = sy.Matrix([[*self._sym_vars]])
+        
+        self._lambda_grad = sy.lambdify(pars, self._sym_grad)
+        self._lambda_grad_u = sy.lambdify(pars, self._sym_grad_u)
+        self._lambda_hess_xx = [sy.lambdify(pars, h) for h in self._sym_hess_xx]
+        self._lambda_hess_xu = sy.lambdify(pars, self._sym_hess_xu)
+        self._lambda_hess_ux = sy.lambdify(pars, self._sym_hess_ux)
+        self._lambda_hess_uu = sy.lambdify(pars, self._sym_hess_uu)
+
+    def get_gradients(self, state: npt.NDArray[np.float64], 
+                     in_u: npt.NDArray[np.float64]) -> Tuple[npt.NDArray[np.float64], 
+                                                           npt.NDArray[np.float64]]:
         """
-        Compute the gradient of the discrete dynamics with respect to state and input.
+        Compute gradients of the dynamics with respect to state and input.
         
-        Parameters:
-        x (np.ndarray): State vector [theta1, theta2, dtheta1, dtheta2]
-        u (np.ndarray): Control input [u1]
-        
+        Args:
+            state: State vector
+            in_u: Control input
+            
         Returns:
-        tuple: (gradx, gradu) where:
-            gradx is the gradient with respect to state (4x4 matrix)
-            gradu is the gradient with respect to input (4x1 matrix)
+            Tuple of gradients with respect to state and input
         """
-        # System parameters for symbolic computation
-        a = self.I1 + self.I2 + self.m1*self.r1**2 + self.m2*(self.l1**2 + self.r2**2)
-        b = 2*self.m2*self.l1*self.r2
-        c = self.I2 + self.m2*self.r2**2
-        d = self.m2*self.l1*self.r2
-        z = self.g*(self.m1*self.r1 + self.m2*self.l1)
-        e = self.g*self.m2*self.r2
+        sys_params = (self._a, self._b, self._c, self._d, 
+                     self.params['f1'], self.params['f2'], 
+                     self._z, self._e)
         
-        # Stack parameters for lambdified functions
-        params = [*x, *u, a, b, c, d, self.f1, self.f2, z, e]
-        
-        # Compute gradients using lambdified functions
-        gradx = np.identity(self.ns) + self.dt * np.array(lgrad(*params))
-        gradu = self.dt * np.array(lgrad_u(*params))
-        
+        gradx = np.identity(self.ns) + self.params['dt'] * np.array(
+            self._lambda_grad(*state, *in_u, *sys_params)
+        )
+        gradu = self.params['dt'] * np.array(
+            self._lambda_grad_u(*state, *in_u, *sys_params)
+        )
         return gradx, gradu
 
-    def get_hessians(self, x, u):
+    def get_hessians(self, state: npt.NDArray[np.float64], 
+                    in_u: npt.NDArray[np.float64]) -> Tuple[npt.NDArray[np.float64], ...]:
         """
-        Compute the Hessian matrices of the discrete dynamics.
+        Compute Hessians of the dynamics with respect to state and input.
         
-        Parameters:
-        x (np.ndarray): State vector [theta1, theta2, dtheta1, dtheta2]
-        u (np.ndarray): Control input [u1]
-        
+        Args:
+            state: State vector
+            in_u: Control input
+            
         Returns:
-        tuple: (hess_xx, hess_xu, hess_ux, hess_uu) where:
-            hess_xx is the Hessian with respect to state (4x4x4 tensor)
-            hess_xu is the mixed Hessian (4x4 matrix)
-            hess_ux is the mixed Hessian (4x4 matrix)
-            hess_uu is the Hessian with respect to input (4x4 matrix)
+            Tuple of Hessians (xx, xu, ux, uu)
         """
-        # System parameters for symbolic computation
-        a = self.I1 + self.I2 + self.m1*self.r1**2 + self.m2*(self.l1**2 + self.r2**2)
-        b = 2*self.m2*self.l1*self.r2
-        c = self.I2 + self.m2*self.r2**2
-        d = self.m2*self.l1*self.r2
-        z = self.g*(self.m1*self.r1 + self.m2*self.l1)
-        e = self.g*self.m2*self.r2
+        sys_params = (self._a, self._b, self._c, self._d, 
+                     self.params['f1'], self.params['f2'], 
+                     self._z, self._e)
         
-        # Stack parameters for lambdified functions
-        params = [*x, *u, a, b, c, d, self.f1, self.f2, z, e]
-        
-        # Compute Hessians using lambdified functions
-        hess_xx = np.array([lhess_xx[i](*params) for i in range(self.ns)])
-        hess_xu = np.array(lhess_xu(*params))
-        hess_ux = np.array(lhess_ux(*params))
-        hess_uu = np.array(lhess_uu(*params))
-        
-        # # Scale by dt for discrete dynamics
-        # hess_xx = self.dt * hess_xx
-        # hess_xu = self.dt * hess_xu
-        # hess_ux = self.dt * hess_ux
-        # hess_uu = self.dt * hess_uu
-        
-        return hess_xx, hess_xu, hess_ux, hess_uu
+        return (
+            np.array([self._lambda_hess_xx[i](*state, *in_u, *sys_params) 
+                     for i in range(self.ns)]),
+            np.array(self._lambda_hess_xu(*state, *in_u, *sys_params)),
+            np.array(self._lambda_hess_ux(*state, *in_u, *sys_params)),
+            np.array(self._lambda_hess_uu(*state, *in_u, *sys_params))
+        )
 
 if __name__ == "__main__":
     # Create an instance of the FlexibleRoboticArm
-    arm = FlexibleRoboticArm()
+    arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni)
     
     # Initial state: [theta1, theta2, dtheta1, dtheta2]
-    x0 = [0.0, 0.0, 0.0, 0.0]
+    x0 = [np.pi/4, np.pi/4, 0.0, 0.0]
     u = [1.0]  # Input torque
     
     # Test 1: Basic dynamics
@@ -233,8 +284,8 @@ if __name__ == "__main__":
     # print("Test 4 - Next state (x0 = [pi/4, pi/4, 0, 0], u = 5):", x_next)
     
     # Test 5: Gradients at a specific state
-    x0 = [0.0, 0.0, 0.0, 0.0]
-    u = [2.0]
+    # x0 = [0.0, 0.0, 0.0, 0.0]
+    # u = [1.0]
     grad_x, grad_u = arm.get_gradients(x0, u)
     # print("Test 5 - Gradients at x0 =\n", x0, "\nand u =\n", u)
     print("    Gradient wrt state (grad_x):\n", grad_x)
