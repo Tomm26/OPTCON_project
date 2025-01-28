@@ -43,7 +43,7 @@ uu = np.zeros((ni, TT, max_iters))   # input seq.
 uu[:,:, 0] = np.repeat(uu_ref[:,0].reshape(-1,1), TT, axis=1)
 x0 = xx_ref[:,0]
 xx[:, 0,0] = x0
-
+print(x0.shape)
 for tt in range(1, TT-1):
     xx[:, tt+1, 0] = dynamics(xx[:, tt, 0], uu[:, tt, 0])[0]
 
