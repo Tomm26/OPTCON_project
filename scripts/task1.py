@@ -22,7 +22,7 @@ if __name__ == "__main__":
     ])
     
     traj_gen = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
-    x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.STEP)
+    x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.EXPONENTIAL)
 
     # Define input waypoints (initial guess)
     u_ref = generate_initial_input_trajectory(arm, x_ref)
@@ -46,7 +46,7 @@ if __name__ == "__main__":
                                             max_iters=10, 
                                             threshold_grad=1e-3,
                                             use_armijo=True,
-                                            show_plots_armijo=True)
+                                            show_plots_armijo=False)
     
     # Plot results
     optimizer.plot_results(x_optimal, u_optimal, x_ref, u_ref)
