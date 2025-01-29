@@ -5,13 +5,13 @@ from cost import Cost
 from traj import TrajectoryGenerator, TrajectoryType
 from newton import NewtonOptimizer
 from utils import generate_initial_input_trajectory
-from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni
+from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters
 
 if __name__ == "__main__":
 
     QQ = 40*np.diag([1.0, 1.0, 1.0, 1.0])
     RR = 0.01*np.eye(1)
-    QQT = 10*np.diag([1.0, 1.0, 1.0, 1.0])
+    QQT = 0.1*np.diag([1.0, 1.0, 1.0, 1.0])
     
     # Initialize system
     arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni)
@@ -19,20 +19,21 @@ if __name__ == "__main__":
     
     # Create reference trajectory
     T = 15.0  # Total time
-    waypoint_times = np.array([0, T])
-    x_waypoints = np.array([[np.pi/8, -np.pi/8, 0, 0], [-np.pi/8, np.pi/8, 0, 0]])
+    waypoint_times = np.array([0, T/2])
+    x_waypoints = np.array([[0, 0, 0, 0], [np.pi, 0, 0, 0]])
     
     print('Generating reference trajectory...')
     traj_gen = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
-    x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.CUBIC)
+    x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.STEP)
     u_ref = generate_initial_input_trajectory(arm, x_ref)
     print('Reference trajectory generated.')
 
-    traj_gen.plot_trajectory(TrajectoryType.CUBIC)
+    traj_gen.plot_trajectory(TrajectoryType.STEP)
     plt.plot(u_ref)
     plt.xlabel('Time (s)')
     plt.ylabel('Control Input (u)')
     plt.title('Reference Control Input')
+    plt.grid()
     plt.show()
 
     # Save x0 and remove it from x_ref
@@ -43,7 +44,7 @@ if __name__ == "__main__":
     u_ref = u_ref.T
 
     # Initialize optimizer
-    optimizer = NewtonOptimizer(arm, cost)
+    optimizer = NewtonOptimizer(arm, cost, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters)
     
     print('Optimizing...')
     # Run optimization
