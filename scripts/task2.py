@@ -9,7 +9,7 @@ from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, fi
 
 if __name__ == "__main__":
 
-    QQ = np.diag([8.0, 8.0, 1.0, 1.0])
+    QQ = np.diag([10.0, 10.0, 1.0, 1.0])
     RR = 0.0001*np.eye(1)
     QQT = np.diag([20.0, 20.0, 1.0, 1.0])
     
@@ -19,16 +19,21 @@ if __name__ == "__main__":
     
     # Create reference trajectory
     T = 8.0  # Total time
-    waypoint_times = np.array([0, T/2])
-    x_waypoints = np.array([[0, 0, 0, 0], [np.pi, 0, 0, 0]])
+    waypoint_times = np.array([0, 1.5, 3.5, 6])
+    x_waypoints = np.array([
+        [0, 0, 0, 0], 
+        [np.deg2rad(30), 0, 0, 0],
+        [np.deg2rad(-45), 0, 0, 0],
+        [np.deg2rad(60), 0, 0, 0]
+        ])
     
     print('Generating reference trajectory...')
     traj_gen = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
-    x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.STEP)
+    x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.CUBIC)
     u_ref = generate_initial_input_trajectory(arm, x_ref)
     print('Reference trajectory generated.')
 
-    traj_gen.plot_trajectory(TrajectoryType.STEP)
+    traj_gen.plot_trajectory(TrajectoryType.CUBIC)
     plt.plot(u_ref)
     plt.xlabel('Time (s)')
     plt.ylabel('Control Input (u)')
