@@ -130,32 +130,32 @@ class FlexibleRoboticArm:
 
     def discrete_dynamics(self, x: npt.NDArray[np.float64], 
                         u: npt.NDArray[np.float64], 
-                        method: str = 'rk45') -> npt.NDArray[np.float64]:
+                        method: str = 'rk') -> npt.NDArray[np.float64]:
         """
         Compute discrete time dynamics using specified integration method.
         
         Args:
             x: State vector
             u: Control input
-            method: Integration method ('euler' or 'rk45')
+            method: Integration method ('euler' or 'rk')
             
         Returns:
             Next state vector
         """
         if method == 'euler':
             return x + self.params['dt'] * self.continuous_dynamics(x, u)
-        elif method == 'rk45':
+        elif method == 'rk':
             sol = solve_ivp(
                 lambda t, x: self.continuous_dynamics(x, u),
                 t_span=[0, self.params['dt']],
                 y0=x,
-                method='RK45',
+                method='RK23',
                 rtol=1e-6,
                 atol=1e-6
             )
             return sol.y[:, -1]
         else:
-            raise ValueError("Unsupported integration method. Choose 'euler' or 'rk45'.")
+            raise ValueError("Unsupported integration method. Choose 'euler' or 'rk'.")
 
     def _init_symbolic_vars(self) -> None:
         """Initialize symbolic variables for gradient and Hessian computation."""

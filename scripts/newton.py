@@ -32,7 +32,7 @@ class NewtonOptimizer:
     def dynamics(self, x, u):
         """Wrapper for arm dynamics that returns next state and gradients."""
 
-        x_next = self.arm.discrete_dynamics(x, u, method='euler')
+        x_next = self.arm.discrete_dynamics(x, u, method='rk')
         grad_x, grad_u = self.arm.get_gradients(x, u)
         hess_x, hess_u, hess_xu, hess_ux = self.arm.get_hessians(x, u)
 

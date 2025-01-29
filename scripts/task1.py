@@ -9,9 +9,9 @@ from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, fi
 
 if __name__ == "__main__":
 
-    QQ = np.diag([20.0, 20.0, 20.0, 20.0])
-    RR = 0.1*np.eye(1)
-    QQT = np.diag([10.0, 10.0, 5.0, 5.0])
+    QQ = np.diag([10.0, 10.0, 1.0, 1.0])
+    RR = 0.0001*np.eye(1)
+    QQT = np.diag([20.0, 20.0, 1.0, 1.0])
     
     # Initialize system
     arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni)
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     print('Optimizing...')
     # Run optimization
     x_optimal, u_optimal, costs = optimizer.newton_optimize(x_ref, u_ref, 
-                                            max_iters=15, 
+                                            max_iters=20, 
                                             threshold_grad=1e-3,
                                             use_armijo=True,
                                             show_plots_armijo=False)
