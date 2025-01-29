@@ -9,16 +9,16 @@ from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, fi
 
 if __name__ == "__main__":
 
-    QQ = 40*np.diag([1.0, 1.0, 1.0, 1.0])
-    RR = 0.01*np.eye(1)
-    QQT = 0.1*np.diag([1.0, 1.0, 1.0, 1.0])
+    QQ = np.diag([20.0, 20.0, 20.0, 20.0])
+    RR = 0.1*np.eye(1)
+    QQT = np.diag([10.0, 10.0, 5.0, 5.0])
     
     # Initialize system
     arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni)
     cost = Cost(QQ, RR, QQT)
     
     # Create reference trajectory
-    T = 15.0  # Total time
+    T = 8.0  # Total time
     waypoint_times = np.array([0, T/2])
     x_waypoints = np.array([[0, 0, 0, 0], [np.pi, 0, 0, 0]])
     
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     print('Optimizing...')
     # Run optimization
     x_optimal, u_optimal, costs = optimizer.newton_optimize(x_ref, u_ref, 
-                                            max_iters=10, 
+                                            max_iters=15, 
                                             threshold_grad=1e-3,
                                             use_armijo=True,
                                             show_plots_armijo=False)

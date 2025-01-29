@@ -32,7 +32,7 @@ class NewtonOptimizer:
     def dynamics(self, x, u):
         """Wrapper for arm dynamics that returns next state and gradients."""
 
-        x_next = self.arm.discrete_dynamics(x, u)
+        x_next = self.arm.discrete_dynamics(x, u, method='euler')
         grad_x, grad_u = self.arm.get_gradients(x, u)
         hess_x, hess_u, hess_xu, hess_ux = self.arm.get_hessians(x, u)
 
@@ -49,8 +49,7 @@ class NewtonOptimizer:
         lT, grad_x, Q = self.cost.terminal_cost(x, x_ref)
         return lT, grad_x, Q
 
-    def select_stepsize(self, xx_ref, uu_ref, x0, xx, uu, JJ, descent_arm, 
-                       KK, sigma, TT, plot=False):
+    def select_stepsize(self, xx_ref, uu_ref, x0, xx, uu, JJ, descent_arm, KK, sigma, TT, plot=False):
         """
         Computes the stepsize using Armijo's rule.
         """
@@ -59,38 +58,37 @@ class NewtonOptimizer:
         stepsize = self.stepsize_0
         
         # Main Armijo loop
-        for ii in range(self.armijo_maxiters):
+        for i in range(self.armijo_maxiters):
+            print(f"Armijo iteration {i+1}")
             # Temporary solution update
             xx_temp = np.zeros((ns, TT))
             uu_temp = np.zeros((ni, TT))
             xx_temp[:, 0] = x0
 
             for tt in range(TT - 1):
-                uu_temp[:, tt] = (uu[:, tt] + 
-                                KK[:, :, tt] @ (xx_temp[:, tt] - xx[:, tt]) + 
-                                stepsize * sigma[:, tt])
+                uu_temp[:, tt] = uu[:, tt] + KK[:, :, tt] @ (xx_temp[:, tt] - xx[:, tt]) + stepsize * sigma[:, tt]
                 xx_temp[:, tt + 1] = self.dynamics(xx_temp[:, tt], uu_temp[:, tt])[0]
 
             # Temporary cost calculation
             JJ_temp = 0
             for tt in range(TT - 1):
-                JJ_temp += self.stagecost(xx_temp[:, tt], uu_temp[:, tt],
-                                        xx_ref[:, tt], uu_ref[:, tt])[0]
+                JJ_temp += self.stagecost(xx_temp[:, tt], uu_temp[:, tt], xx_ref[:, tt], uu_ref[:, tt])[0]
 
-            temp_cost = self.termcost(xx_temp[:, -1], xx_ref[:, -1])[0]
-            JJ_temp += temp_cost
+            JJ_temp += self.termcost(xx_temp[:, -1], xx_ref[:, -1])[0]
 
             stepsizes.append(stepsize)
-            costs_armijo.append(np.min([JJ_temp, 100 * JJ]))
+            costs_armijo.append(JJ_temp)
 
             if JJ_temp >= JJ + self.cc * stepsize * descent_arm:
                 stepsize *= self.beta
             else:
-                print(f'Armijo stepsize = {stepsize:.3e}')
+                print(f'Armijo stepsize = {stepsize:.3e}, computed in {i+1} iterations')
                 break
 
-            if ii == self.armijo_maxiters - 1:
+            if i == self.armijo_maxiters - 1:
                 print("WARNING: no stepsize was found with armijo rule!")
+                stepsize = self.fixed_stepsize
+                break
 
         if plot:
             self._plot_armijo_descent(stepsize, x0, xx, uu, KK, sigma,
@@ -100,56 +98,79 @@ class NewtonOptimizer:
         return stepsize
 
     def _plot_armijo_descent(self, stepsize_0, x0, xx, uu, KK, sigma,
-                           xx_ref, uu_ref, JJ, descent_arm,
-                           stepsizes, costs_armijo, ns, ni, TT):
+                            xx_ref, uu_ref, JJ, descent_arm,
+                            stepsizes, costs_armijo, ns, ni, TT):
         """
         Plots the cost as a function of the stepsize in the Armijo rule.
+        Optimized version using vectorized operations.
         """
-        steps = np.linspace(0, stepsize_0, int(2e1))
+        # Generate uniform stepsize grid (ridotto il numero di punti)
+        steps = np.linspace(0, stepsize_0, 10)  # Ridotto da 20 a 10 punti
         costs = np.zeros(len(steps))
 
-        for ii in range(len(steps)):
-            step = steps[ii]
-            xx_temp = np.zeros((ns, TT))
-            uu_temp = np.zeros((ni, TT))
-            xx_temp[:, 0] = x0
+        # Pre-allocate arrays for all steps at once
+        xx_temp_all = np.zeros((len(steps), ns, TT))
+        uu_temp_all = np.zeros((len(steps), ni, TT))
+        xx_temp_all[:, :, 0] = x0
 
-            for tt in range(TT - 1):
-                uu_temp[:, tt] = (uu[:, tt] + 
-                                KK[:, :, tt] @ (xx_temp[:, tt] - xx[:, tt]) + 
-                                step * sigma[:, tt])
-                xx_temp[:, tt + 1] = self.dynamics(xx_temp[:, tt], uu_temp[:, tt])[0]
+        # Compute all trajectories in parallel
+        for tt in range(TT - 1):
+            # Broadcast operations for all stepsizes at once
+            state_diff = xx_temp_all[:, :, tt] - xx[:, tt]
+            feedback_term = np.einsum('ijk,lj->li', KK[:, :, tt:tt+1], state_diff)
+            stepsize_term = np.outer(steps, sigma[:, tt])
+            
+            uu_temp_all[:, :, tt] = (uu[:, tt] + 
+                                    feedback_term + 
+                                    stepsize_term)
+            
+            # Compute next states for all trajectories
+            for i in range(len(steps)):
+                xx_temp_all[i, :, tt + 1] = self.dynamics(xx_temp_all[i, :, tt], 
+                                                        uu_temp_all[i, :, tt])[0]
 
+        # Compute costs efficiently
+        for i in range(len(steps)):
             JJ_temp = 0
-            for tt in range(TT - 1):
-                temp_cost = self.stagecost(xx_temp[:, tt], uu_temp[:, tt],
-                                         xx_ref[:, tt], uu_ref[:, tt])[0]
-                JJ_temp += temp_cost
+            xx_temp = xx_temp_all[i]
+            uu_temp = uu_temp_all[i]
+            
+            # Vectorize stage cost computation
+            stage_costs = np.array([
+                self.stagecost(xx_temp[:, t], uu_temp[:, t],
+                            xx_ref[:, t], uu_ref[:, t])[0]
+                for t in range(TT - 1)
+            ])
+            JJ_temp = np.sum(stage_costs)
+            
+            # Add terminal cost
+            JJ_temp += self.termcost(xx_temp[:, -1], xx_ref[:, -1])[0]
+            costs[i] = JJ_temp
 
-            temp_cost = self.termcost(xx_temp[:, -1], xx_ref[:, -1])[0]
-            JJ_temp += temp_cost
-
-            costs[ii] = np.min([JJ_temp, 100 * JJ])
-
+        # Plotting (ora più efficiente)
         plt.figure(1)
         plt.clf()
-        plt.plot(steps, costs, color='y',
-                label='$J(\\mathbf{u}^k - \\text{stepsize}\\cdot d^k)$')
-        plt.plot(steps, JJ + descent_arm * steps, color='r',
-                label='$J(\\mathbf{u}^k) + \\text{stepsize} \\cdot \\nabla J(\\mathbf{u}^k)^{\\top} d^k$')
-        plt.plot(steps, JJ + self.cc * descent_arm * steps, color='g', 
-                linestyle='dashed',
-                label='$J(\\mathbf{u}^k) + c\\cdot\\text{stepsize} \\cdot \\nabla J(\\mathbf{u}^k)^{\\top} d^k$')
+        
+        # Plot tutto in un'unica figura
+        plt.plot(steps, costs, 'y-', 
+                steps, JJ + descent_arm * steps, 'r-',
+                steps, JJ + self.cc * descent_arm * steps, 'g--')
+        
         plt.scatter(stepsizes, costs_armijo, marker='*', c='b', zorder=5)
-        plt.grid()
+        
+        # Aggiungi le labels dopo
+        plt.gca().lines[0].set_label('$J(\\mathbf{u}^k - \\text{stepsize}\\cdot d^k)$')
+        plt.gca().lines[1].set_label('$J(\\mathbf{u}^k) + \\text{stepsize} \\cdot \\nabla J(\\mathbf{u}^k)^{\\top} d^k$')
+        plt.gca().lines[2].set_label('$J(\\mathbf{u}^k) + c\\cdot\\text{stepsize} \\cdot \\nabla J(\\mathbf{u}^k)^{\\top} d^k$')
+
+        plt.grid(True)
         plt.xlabel('stepsize')
         plt.legend()
-        plt.draw()
         plt.show()
 
-    def ltv_LQR(self, AAin, BBin, QQin, RRin, SSin, QQfin, TT, x0, qqin, rrin, qqfin):
+    def solve_lqp(self, AAin, BBin, QQin, RRin, SSin, QQfin, TT, x0, qqin, rrin, qqfin):
         """
-        LTV LQR controller with affine terms.
+        Affine Linear Quadratic Optimal Control Problem Solver
         """
         # Handle 2D input matrices
         try:
@@ -258,8 +279,7 @@ class NewtonOptimizer:
 
         return KK, sigma, PP, xx, uu
 
-    def newton_optimize(self, xx_ref, uu_ref, max_iters=15, 
-                       threshold_grad=1e-4, use_armijo=True, show_plots_armijo=False):
+    def newton_optimize(self, xx_ref, uu_ref, max_iters=15, threshold_grad=1e-4, use_armijo=True, show_plots_armijo=False):
         """
         Regularized Newton's method in closed-loop.
         
@@ -290,7 +310,7 @@ class NewtonOptimizer:
         for tt in range(1, TT-1):
             xx[:, tt+1, 0] = self.dynamics(xx[:, tt, 0], uu[:, tt, 0])[0]
 
-        JJ = np.zeros(max_iters)
+        JJ = np.zeros(max_iters-1)
 
         for kk in range(max_iters-1):
             # Initialize matrices
@@ -324,8 +344,7 @@ class NewtonOptimizer:
                 rrt[:, tt] = rrtemp
 
                 # Dynamics linearization
-                _, AA[:, :, tt], BB[:, :, tt], *_ = self.dynamics(xx[:, tt, kk], 
-                                                                 uu[:, tt, kk])
+                _, AA[:, :, tt], BB[:, :, tt], *_ = self.dynamics(xx[:, tt, kk], uu[:, tt, kk])
 
                 # Costate equation
                 lmbda[:,tt, kk] = qqt[:,tt] + AA[:,:,tt].T @ lmbda[:,tt+1, kk]
@@ -333,7 +352,7 @@ class NewtonOptimizer:
 
             # Check convergence
             normGrad = np.linalg.norm(grdJdu[:, :, kk])
-            print(f"\nIteration {kk}: ")
+            print(f"\nIteration {kk+1}: ")
             print("Current cost: ", JJ[kk])
             print("Current gradient norm: ", normGrad)
 
@@ -341,17 +360,20 @@ class NewtonOptimizer:
                 print("Optimization finished: gradient norm is below threshold")
                 return xx[:, :, :kk+1], uu[:, :, :kk+1], JJ[:kk+1]
 
-            # LQR solution
-            KK, sigma, *_, deltau = self.ltv_LQR(
-                AA, BB, QQt, RRt, SSt, QQt[:,:,-1], TT, 
-                np.zeros_like(x0), qqt, rrt, qqT
-            )
+            # LQP solution
+            KK, sigma, _, _, deltau = self.solve_lqp(AA, BB, QQt, RRt, SSt, QQt[:,:,-1], TT,np.zeros_like(x0), qqt, rrt, qqT)
 
             # Step size selection
             if use_armijo:
+                descent_arm = 0
+                for tt in range(TT-1):
+                    descent_arm += grdJdu[:, tt, kk].T @ deltau[:,tt]
+
+                # descent_arm = (deltau @ grdJdu[:, :, kk].T).squeeze()
+
                 stepsize = self.select_stepsize(
                     xx_ref, uu_ref, x0, xx[:, :, kk], uu[:, :, kk], 
-                    JJ[kk], (deltau @ grdJdu[:, :, kk].T).squeeze(), 
+                    JJ[kk], descent_arm, 
                     KK, sigma, TT, show_plots_armijo
                 )
             else:
@@ -360,9 +382,7 @@ class NewtonOptimizer:
             # Forward pass: update input and state in closed-loop
             xx[:, 0, kk+1] = x0
             for tt in range(TT-1):
-                uu[:, tt, kk+1] = (uu[:, tt, kk] + 
-                                  KK[:, :, tt] @ (xx[:, tt, kk+1] - xx[:, tt, kk]) + 
-                                  stepsize * sigma[:, tt])
+                uu[:, tt, kk+1] = (uu[:, tt, kk] + KK[:, :, tt] @ (xx[:, tt, kk+1] - xx[:, tt, kk]) + stepsize * sigma[:, tt])
                 xx[:, tt+1, kk+1] = self.dynamics(xx[:, tt, kk+1], uu[:, tt, kk+1])[0]
 
         print("\nOptimization finished: maximum iterations reached")

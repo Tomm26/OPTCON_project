@@ -20,13 +20,6 @@ class Cost:
         assert x_ref.shape == (self.ns,), f"Reference state must be {self.ns}-dimensional"
         assert u_ref.shape == (self.ni,), f"Reference input must be {self.ni}-dimensional"
         
-    def _check_trajectory_dimensions(self, x_traj, u_traj, x_ref_traj, u_ref_traj):
-        T = u_traj.shape[0]
-        assert x_traj.shape == (T+1, self.ns), f"State trajectory must be {T+1}x{self.ns}"
-        assert u_traj.shape == (T, self.ni), f"Input trajectory must be {T}x{self.ni}"
-        assert x_ref_traj.shape == (T+1, self.ns), f"Reference state trajectory must be {T+1}x{self.ns}"
-        assert u_ref_traj.shape == (T, self.ni), f"Reference input trajectory must be {T}x{self.ni}"
-        
     def stage_cost(self, x, u, x_ref, u_ref):
         self._check_dimensions(x, u, x_ref, u_ref)
         x_dev = x - x_ref
@@ -46,23 +39,6 @@ class Cost:
 
         grad_x = self.QT @ x_dev
         return lT, grad_x, self.QT
-        
-    def complete_cost(self, x_traj, u_traj, x_ref_traj, u_ref_traj):
-        self._check_trajectory_dimensions(x_traj, u_traj, x_ref_traj, u_ref_traj)
-        T = u_traj.shape[0]
-        l_traj = np.zeros(T)
-        grad_x_traj = np.zeros((T+1, self.ns))
-        grad_u_traj = np.zeros((T, self.ni))
-        
-        for t in range(T):
-            l_traj[t], grad_x_traj[t], grad_u_traj[t], _, _ = self.stage_cost(
-                x_traj[t], u_traj[t], x_ref_traj[t], u_ref_traj[t])
-            
-        lT, grad_x_traj[T], _ = self.terminal_cost(x_traj[T], x_ref_traj[T])
-
-        J = np.sum(l_traj) + lT
-        
-        return J, l_traj, grad_x_traj, grad_u_traj
 
 
 if __name__ == "__main__":
