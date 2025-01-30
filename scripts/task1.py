@@ -10,9 +10,9 @@ from animate import FlexibleRobotAnimator
 
 if __name__ == "__main__":
 
-    QQ = np.diag([10.0, 20.0, 3.5, 3.5])
-    RR = 0.0008*np.eye(1)
-    QQT = np.diag([30.0, 50.0, 2.0, 2.0])
+    QQ = np.diag([10.0, 10.0, 1.0, 1.0])
+    RR = 0.0001*np.eye(1)
+    QQT = np.diag([10.0, 10.0, 1.0, 1.0])
 
     plot = False
     plot_armijo = False
@@ -49,12 +49,12 @@ if __name__ == "__main__":
     u_ref = u_ref.T
 
     # Initialize optimizer
-    optimizer = NewtonOptimizer(arm, cost, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters)
+    optimizer = NewtonOptimizer(arm, cost, dt, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters)
     
     print('Optimizing...')
     # Run optimization
     x_optimal, u_optimal, costs = optimizer.newton_optimize(x_ref, u_ref, 
-                                            max_iters=20, 
+                                            max_iters=15, 
                                             threshold_grad=1e-3,
                                             use_armijo=True,
                                             show_plots_armijo=plot_armijo)

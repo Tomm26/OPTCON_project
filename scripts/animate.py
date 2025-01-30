@@ -98,18 +98,17 @@ class FlexibleRobotAnimator:
         
         return [self.line] + self.joints + [self.trace]
 
-    def animate(self, interval=50, save_path=None):
+    def animate(self, save_path=None):
         """
         Create and display the animation.
         
         Args:
-            interval: Time between frames in milliseconds
             save_path: If provided, save the animation to this path
         """
         anim = FuncAnimation(self.fig, self.update,
                            init_func=self.init_animation,
                            frames=len(self.trajectory),
-                           interval=interval,
+                           interval=self.dt*1000,
                            blit=True)
         
         if save_path:

@@ -15,4 +15,4 @@ fixed_stepsize = 0.7
 stepsize_0 = 1.0
 cc = 0.5
 beta = 0.7
-armijo_maxiters = 10
+armijo_maxiters = 15
