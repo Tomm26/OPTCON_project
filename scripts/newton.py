@@ -403,7 +403,7 @@ class NewtonOptimizer:
         
         # Create figure with subplots
         fig, axs = plt.subplots(5, 1, figsize=(12, 15))
-        fig.suptitle('Optimization Results', fontsize=16)
+        fig.suptitle('Optimization Results', fontsize=15)
         
         # Plot state trajectories
         state_labels = ['θ₁', 'θ₂', 'ω₁', 'ω₂']
