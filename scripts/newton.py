@@ -34,7 +34,7 @@ class NewtonOptimizer:
 
         x_next = self.arm.discrete_dynamics(x, u, method='rk')
         grad_x, grad_u = self.arm.get_gradients(x, u)
-        hess_x, hess_u, hess_xu, hess_ux = self.arm.get_hessians(x, u)
+        hess_x, hess_u, hess_xu, hess_ux = None, None, None, None #self.arm.get_hessians(x,u)
 
         return x_next, grad_x, grad_u, hess_x, hess_u, hess_xu, hess_ux
 

@@ -157,6 +157,22 @@ class FlexibleRoboticArm:
         else:
             raise ValueError("Unsupported integration method. Choose 'euler' or 'rk'.")
 
+    def linearize_over_traj(self, x_traj, u_traj):
+        """
+        Linearize the dynamics along the feasible x_traj, u_traj over a finite horizon
+        x_traj: (ns x TT)
+        u_traj: (ni x TT)
+        """
+        T = x_traj.shape[-1]
+
+        AA_traj = np.zeros((self.ns, self.ns, T)) # tensor storing the A matrices along t
+        BB_traj = np.zeros((self.ns, self.ni, T)) # tensor storing the B matrices along t
+        
+        for t in range(T):
+            AA_traj[:,:, t], BB_traj[:,:, t] = self.get_gradients(x_traj[:, t], u_traj[:, t])
+
+        return AA_traj, BB_traj
+
     def _init_symbolic_vars(self) -> None:
         """Initialize symbolic variables for gradient and Hessian computation."""
         # Create symbolic variables
