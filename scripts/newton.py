@@ -32,11 +32,10 @@ class NewtonOptimizer:
     def dynamics(self, x, u):
         """Wrapper for arm dynamics that returns next state and gradients."""
 
-        x_next = self.arm.discrete_dynamics(x, u, method='rk')
+        x_next = self.arm.discrete_dynamics(x, u)
         grad_x, grad_u = self.arm.get_gradients(x, u)
-        hess_x, hess_u, hess_xu, hess_ux = None, None, None, None #self.arm.get_hessians(x,u)
 
-        return x_next, grad_x, grad_u, hess_x, hess_u, hess_xu, hess_ux
+        return x_next, grad_x, grad_u
 
     def stagecost(self, x, u, x_ref, u_ref):
         """Wrapper for stage cost that matches optimizer interface."""
@@ -156,7 +155,7 @@ class NewtonOptimizer:
                 steps, JJ + descent_arm * steps, 'r-',
                 steps, JJ + self.cc * descent_arm * steps, 'g--')
         
-        plt.scatter(stepsizes, costs_armijo, marker='*', c='b', zorder=5)
+        plt.scatter(stepsizes[-1], costs_armijo[-1], marker='*', c='b', zorder=5)
         
         # Aggiungi le labels dopo
         plt.gca().lines[0].set_label('$J(\\mathbf{u}^k - \\text{stepsize}\\cdot d^k)$')
@@ -344,7 +343,7 @@ class NewtonOptimizer:
                 rrt[:, tt] = rrtemp
 
                 # Dynamics linearization
-                _, AA[:, :, tt], BB[:, :, tt], *_ = self.dynamics(xx[:, tt, kk], uu[:, tt, kk])
+                _, AA[:, :, tt], BB[:, :, tt] = self.dynamics(xx[:, tt, kk], uu[:, tt, kk])
 
                 # Costate equation
                 lmbda[:,tt, kk] = qqt[:,tt] + AA[:,:,tt].T @ lmbda[:,tt+1, kk]

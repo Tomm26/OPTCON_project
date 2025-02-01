@@ -8,7 +8,7 @@ from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni
 class FlexibleRoboticArm:
     def __init__(self, m1: float, m2: float, l1: float, l2: float, r1: float, r2: float, 
                  I1: float, I2: float, g: float, f1: float, f2: float, dt: float, 
-                 ns: int = 4, ni: int = 1):
+                 ns: int = 4, ni: int = 1, method: str = 'euler'):
         """
         Initialize the Flexible Robotic Arm system with given parameters.
         
@@ -22,6 +22,7 @@ class FlexibleRoboticArm:
             dt: Time step
             ns: Number of states (default: 4)
             ni: Number of inputs (default: 1)
+            method: Method of discretization ('euler' or 'rk'), rk use RK23
         """
         self.params = {
             'm1': m1, 'm2': m2, 'l1': l1, 'l2': l2, 
@@ -30,11 +31,12 @@ class FlexibleRoboticArm:
         }
         self.ns = ns
         self.ni = ni
+        self.method = method
         
         # Pre-compute constant system parameters
         self._compute_system_constants()
         
-        # Initialize symbolic variables for gradients and hessians
+        # Initialize symbolic variables for gradients
         self._init_symbolic_vars()
 
     def _compute_system_constants(self) -> None:
@@ -129,8 +131,7 @@ class FlexibleRoboticArm:
         return np.array([dtheta1, dtheta2, ddtheta[0], ddtheta[1]])
 
     def discrete_dynamics(self, x: npt.NDArray[np.float64], 
-                        u: npt.NDArray[np.float64], 
-                        method: str = 'rk') -> npt.NDArray[np.float64]:
+                        u: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         """
         Compute discrete time dynamics using specified integration method.
         
@@ -142,9 +143,9 @@ class FlexibleRoboticArm:
         Returns:
             Next state vector
         """
-        if method == 'euler':
+        if self.method.lower() == 'euler':
             return x + self.params['dt'] * self.continuous_dynamics(x, u)
-        elif method == 'rk':
+        elif self.method.lower() == 'rk':
             sol = solve_ivp(
                 lambda t, x: self.continuous_dynamics(x, u),
                 t_span=[0, self.params['dt']],
@@ -173,8 +174,92 @@ class FlexibleRoboticArm:
 
         return AA_traj, BB_traj
 
+    def get_gradients(self, 
+                    state: npt.NDArray[np.float64], 
+                    in_u: npt.NDArray[np.float64]
+                    ) -> Tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        """
+        Compute gradients of the dynamics with respect to state and input
+        using either Euler or RK23 integration.
+        
+        Args:
+            state: Current state vector.
+            in_u: Control input vector.
+        
+        Returns:
+            Tuple (gradx, gradu) where:
+            gradx: Discretized gradient ∂x₊/∂x (ns x ns)
+            gradu: Discretized gradient ∂x₊/∂u (ns x ni)
+        """
+        sys_params = (self._a, self._b, self._c, self._d, 
+                    self.params['f1'], self.params['f2'], 
+                    self._z, self._e)
+        dt = self.params['dt']
+        ns = self.ns
+        ni = self.ni
+
+        if self.method.lower() == 'euler':
+            # Euler discretization for the gradients:
+            # gradx ≈ I + dt * ∂f/∂x
+            # gradu ≈ dt * ∂f/∂u
+            gradx = np.eye(ns) + dt * np.array(
+                self._lambda_grad(*state, *in_u, *sys_params)
+            )
+            gradu = dt * np.array(
+                self._lambda_grad_u(*state, *in_u, *sys_params)
+            )
+            return gradx, gradu
+
+        elif self.method.lower() == 'rk':
+            # Use RK23 integration on the augmented system.
+            # The augmented state includes:
+            #   - the state x (length ns),
+            #   - X = ∂x/∂x₀ (ns x ns, flattened),
+            #   - Y = ∂x/∂u (ns x ni, flattened).
+            x0 = state
+            X0 = np.eye(ns)
+            Y0 = np.zeros((ns, ni))
+            aug0 = np.concatenate([x0, X0.flatten(), Y0.flatten()])
+
+            def augmented_ode(t, aug):
+                # Extract state and reshape sensitivity matrices.
+                x = aug[:ns]
+                X = aug[ns:ns + ns * ns].reshape(ns, ns)
+                Y = aug[ns + ns * ns:].reshape(ns, ni)
+
+                # Continuous dynamics for the state.
+                dxdt = self.continuous_dynamics(x, in_u)
+
+                # Jacobians: A = ∂f/∂x and B = ∂f/∂u.
+                A = np.array(self._lambda_grad(*x, *in_u, *sys_params))
+                B = np.array(self._lambda_grad_u(*x, *in_u, *sys_params))
+
+                # Sensitivity equations:
+                dXdt = A @ X
+                dYdt = A @ Y + B
+
+                return np.concatenate([dxdt, dXdt.flatten(), dYdt.flatten()])
+
+            # Integrate the augmented system over [0, dt] using RK23.
+            sol = solve_ivp(
+                augmented_ode,
+                t_span=[0, dt],
+                y0=aug0,
+                method='RK23',
+                t_eval=[dt],
+                rtol=1e-6,
+                atol=1e-6
+            )
+            aug_final = sol.y[:, -1]
+            gradx = aug_final[ns:ns + ns * ns].reshape(ns, ns)
+            gradu = aug_final[ns + ns * ns:].reshape(ns, ni)
+            return gradx, gradu
+
+        else:
+            raise ValueError("Unsupported integration method. Use 'euler' or 'rk'.")
+
     def _init_symbolic_vars(self) -> None:
-        """Initialize symbolic variables for gradient and Hessian computation."""
+        """Initialize symbolic variables for gradient computation."""
         # Create symbolic variables
         self._sym_vars = sy.symbols('x1 x2 x3 x4 u a b c d f1 f2 z e')
         x1, x2, x3, x4, u, a, b, c, d, f1, f2, z, e = self._sym_vars
@@ -201,74 +286,15 @@ class FlexibleRoboticArm:
         self._sym_grad = self._sym_f.jacobian(x)
         self._sym_grad_u = self._sym_f.diff(u)
         
-        # Pre-compute Hessians
-        self._sym_hess_xx = [self._sym_grad[:, i].jacobian(x).T for i in range(self.ns)]
-        self._sym_hess_xu = sy.Matrix([self._sym_grad[:,i].diff(u) for i in range(self.ns)]).reshape(4,4).T
-        self._sym_hess_ux = self._sym_grad_u.jacobian(x).T
-        self._sym_hess_uu = self._sym_grad_u.diff(u).T
-        
         # Create lambdified functions
         self._create_lambda_functions()
 
     def _create_lambda_functions(self) -> None:
-        """Create lambda functions for gradients and Hessians."""
+        """Create lambda functions for gradients."""
         pars = sy.Matrix([[*self._sym_vars]])
         
         self._lambda_grad = sy.lambdify(pars, self._sym_grad)
         self._lambda_grad_u = sy.lambdify(pars, self._sym_grad_u)
-        self._lambda_hess_xx = [sy.lambdify(pars, h) for h in self._sym_hess_xx]
-        self._lambda_hess_xu = sy.lambdify(pars, self._sym_hess_xu)
-        self._lambda_hess_ux = sy.lambdify(pars, self._sym_hess_ux)
-        self._lambda_hess_uu = sy.lambdify(pars, self._sym_hess_uu)
-
-    def get_gradients(self, state: npt.NDArray[np.float64], 
-                     in_u: npt.NDArray[np.float64]) -> Tuple[npt.NDArray[np.float64], 
-                                                           npt.NDArray[np.float64]]:
-        """
-        Compute gradients of the dynamics with respect to state and input.
-        
-        Args:
-            state: State vector
-            in_u: Control input
-            
-        Returns:
-            Tuple of gradients with respect to state and input
-        """
-        sys_params = (self._a, self._b, self._c, self._d, 
-                     self.params['f1'], self.params['f2'], 
-                     self._z, self._e)
-        
-        gradx = np.identity(self.ns) + self.params['dt'] * np.array(
-            self._lambda_grad(*state, *in_u, *sys_params)
-        )
-        gradu = self.params['dt'] * np.array(
-            self._lambda_grad_u(*state, *in_u, *sys_params)
-        )
-        return gradx, gradu
-
-    def get_hessians(self, state: npt.NDArray[np.float64], 
-                    in_u: npt.NDArray[np.float64]) -> Tuple[npt.NDArray[np.float64], ...]:
-        """
-        Compute Hessians of the dynamics with respect to state and input.
-        
-        Args:
-            state: State vector
-            in_u: Control input
-            
-        Returns:
-            Tuple of Hessians (xx, xu, ux, uu)
-        """
-        sys_params = (self._a, self._b, self._c, self._d, 
-                     self.params['f1'], self.params['f2'], 
-                     self._z, self._e)
-        
-        return (
-            np.array([self._lambda_hess_xx[i](*state, *in_u, *sys_params) 
-                     for i in range(self.ns)]),
-            np.array(self._lambda_hess_xu(*state, *in_u, *sys_params)),
-            np.array(self._lambda_hess_ux(*state, *in_u, *sys_params)),
-            np.array(self._lambda_hess_uu(*state, *in_u, *sys_params))
-        )
 
 if __name__ == "__main__":
     # Create an instance of the FlexibleRoboticArm
@@ -306,11 +332,3 @@ if __name__ == "__main__":
     # print("Test 5 - Gradients at x0 =\n", x0, "\nand u =\n", u)
     print("    Gradient wrt state (grad_x):\n", grad_x)
     print("    Gradient wrt input (grad_u):\n", grad_u)
-    
-    # Test 6: Hessians at a specific state
-    hess_x, hess_u, hess_xu, hess_ux = arm.get_hessians(x0, u)
-    # print("Test 6 - Hessians at x0 =\n", x0, "\nand u =\n", u)
-    print("    Hessian wrt state (hess_x):\n", hess_x)
-    print("    Hessian wrt input (hess_u):\n", hess_u)
-    print("    Mixed Hessian (hess_xu):\n", hess_xu)
-    print("    Mixed Hessian transpose (hess_ux):\n", hess_ux)
