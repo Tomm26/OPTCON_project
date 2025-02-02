@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from dynamics import FlexibleRoboticArm
 from cost import Cost
-from traj import TrajectoryGenerator, TrajectoryType
+import pandas as pd
 from newton import NewtonOptimizer
 from utils import generate_initial_input_trajectory_2
 from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters
@@ -21,78 +21,98 @@ if __name__ == "__main__":
     RRreg = 0.001*np.eye(1)
     QQTreg = np.diag([20.0, 20.0, 1.0, 1.0])
     
-    plot = True
-
     # Initialize system
     arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni)
-
     cost = Cost(QQ, RR, QQT)
+    optimizer = NewtonOptimizer(arm, cost, dt, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters)
+
+    # Load optimized trajectory
+    # Load trajectory data from CSV
+    df = pd.read_csv('OPTCON_project_giorgio/OPTCON_project/traj/optimal_trajectories.csv')
+    print("Available columns in CSV:", df.columns)
     
-    # Create reference trajectory
-    T = 13.0  # Total time
-    waypoint_times = np.array([0, 2.5, 4.5, 7])
-    x_waypoints = np.array([
-        [0, 0, 0, 0], 
-        [np.deg2rad(30), -np.deg2rad(30), 0, 0],
-        [np.deg2rad(-45), -np.deg2rad(-45), 0, 0],
-        [np.deg2rad(60), -np.deg2rad(60), 0, 0]
-        ])
+    # Extract state and input trajectories
+    x_optimal = np.array([
+        df['x1'].values,  # θ1: angle of first link
+        df['x2'].values,  # θ2: angle of second link
+        df['x3'].values,  # θ̇1: angular velocity of first link
+        df['x4'].values,  # θ̇2: angular velocity of second link
+    ])
     
-    print('Generating reference trajectory...')
-    traj_gen = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
-    x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.STEP)
-    u_ref = generate_initial_input_trajectory_2(arm, x_ref)
-    print('Reference trajectory generated.')
-
-    if plot:
-        traj_gen.plot_trajectory(TrajectoryType.STEP)
-        plt.plot(u_ref)
-        plt.xlabel('Time (s)')
-        plt.ylabel('Control Input (u)')
-        plt.title('Reference Control Input')
-        plt.grid()
-        plt.show()
-
-    # Save x0 and remove it from x_ref
-    x0 = x_ref[0]
-    x_ref = x_ref[1:]
-
-    x_ref = x_ref.T
-    u_ref = u_ref.T
-
-    # Initialize optimizer
-    optimizer = NewtonOptimizer(arm, cost, dt,fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters)
+    u_optimal = np.array([df['u'].values])  # Control input
     
-    print('Optimizing...')
+    # Reshape trajectories to correct dimensions
+    x_optimal = x_optimal.reshape(4, -1)  # 4 states x T timesteps
+    u_optimal = u_optimal.reshape(1, -1)  # 1 input x T timesteps
+    x0 = x_optimal[:, 0]
 
-    # Run optimization
-    x_optimal, u_optimal, costs = optimizer.newton_optimize(x_ref, u_ref, 
-                                            max_iters=20, 
-                                            threshold_grad=1e-3,
-                                            use_armijo=True,
-                                            show_plots_armijo=False)
-    
-    AA_traj, BB_traj = arm.linearize_over_traj(x_optimal[:, :, -1], u_optimal[:, :, -1])
 
-    TT = x_optimal[:, :, -1].shape[-1]
+    # Linearize the dynamics over the optimal trajectory
+    AA_traj, BB_traj = arm.linearize_over_traj(x_optimal, u_optimal)
+
+    TT = x_optimal.shape[-1]
+
+    # Solve the LQ problem to obtain the K gain matrices
     KK, *_ = optimizer.solve_lqp(AA_traj, BB_traj, QQreg, RRreg, np.zeros((ni,ns, TT)), QQTreg, TT, 
                                    np.zeros((ns)), np.zeros((ns, TT)), np.zeros((ni, TT)), np.zeros((ns)))
     
     # Apply the feedback controller on the non linear dynamics
     uu = np.zeros((ni, TT))
     xx = np.zeros((ns, TT))
-    xx[:, 0] = x0 + np.array([0.2, 0.1, 0.1,0.1]) #x0 perturbed (da migliorare)
+    
+    
+    # Define different kinds of disturbances
+    impulse_torque = False
+    gaussian_noise = False
+    perturbed_state = False
+    perturbed_params = False
+
+    # Impulse torque parameters
+    uu_noise = 0     
+    delta = 1/dt * 1     # Duration (in s)
+    starting_time = TT/3 # Starting time
+    intensity = 1.3
+
+    # Gaussian noise parameters
+    mean = 0
+    std = 0.003
+
+    # Perturbed initial state x0
+    xx[:, 0] = x0 + np.array([0.02, 0.1, 0.1, 0.1]) * int(perturbed_state)
+
+    # Perturbed parameters
+    if perturbed_params:
+        arm = FlexibleRoboticArm(m1*1.10, m2*1.20, l1*1.05, l2*1.05, r1, r2, I1, I2, g, f1, f2, dt, ns, ni)
 
     for t in range(TT-1):
-        uu[:, t] = u_optimal[:, t, -1] +  KK[:, :, t] @ (xx[:, t] - x_optimal[:, t, -1])
-        xx[:, t+1] = arm.discrete_dynamics(xx[:, t], uu[:, t])
+
+        if starting_time - delta <= t <= starting_time + delta and impulse_torque:
+            print(t)
+            # add impulse torque
+            uu_noise = -uu[:, t-1] * intensity
+        else:
+            uu_noise = 0
+
+        uu[:, t] = u_optimal[:, t] +  KK[:, :, t] @ (xx[:, t] - x_optimal[:, t]) + uu_noise
+        xx[:, t+1] = arm.discrete_dynamics(xx[:, t], uu[:, t]) + np.random.normal(mean, std, size=ns)*int(gaussian_noise)
+
+    
+    # Plot results
+    
+    plt.plot(range(TT), x_optimal[0], 'r', label = 'optimal theta1')
+    plt.plot(range(TT), xx[0], 'g', label = 'approx theta1')
+    plt.show()
+
+    plt.plot(range(TT), x_optimal[1], 'r', label = 'optimal theta1')
+    plt.plot(range(TT), xx[1], 'g', label = 'approx theta1')
+    plt.show()
+
+    plt.plot(range(TT), u_optimal.T, 'r', label = 'optimal theta1')
+    plt.plot(range(TT), uu.T, 'g', label = 'approx theta1')
+    plt.show()
 
     animator = FlexibleRobotAnimator(xx.T, dt=dt)
     animator.animate()
-    
-    """# Plot results
-    optimizer.plot_results(x_optimal, u_optimal, x_ref, u_ref)
-    optimizer.plot_convergence(costs)"""
 
 
 
