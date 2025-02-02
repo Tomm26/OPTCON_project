@@ -10,6 +10,7 @@ from datetime import datetime
 import cvxopt
 from cvxopt import matrix, solvers
 from enum import Enum
+import matplotlib.pyplot as plt
 
 from parameters import dt, ns, ni  # System parameters
 from dynamics import FlexibleRoboticArm  # System dynamics
@@ -101,7 +102,7 @@ def task4(xx_traj, uu_traj, lazyExecution=False):
         dt=dt,   # discretization step from parameters.py
         ns=ns,   # number of states (4: [θ1, θ2, θ̇1, θ̇2])
         ni=ni,   # number of inputs (1: torque)
-        method='rk'  # integration method (Runge-Kutta)
+        method='euler'  # integration method (Runge-Kutta)
     )
     
     # MPC prediction horizon (reduced from 400 to 15 for computational efficiency)
@@ -377,9 +378,7 @@ def plot_mpc_results(results):
     
     Args:
         results: GetData object containing tracking results
-    """
-    import matplotlib.pyplot as plt
-    
+    """    
     # Find common length for all trajectories
     T_ref = results.xx_ref.shape[1]
     T_track = min(track[0].shape[1] for track in results.tracking_results)
