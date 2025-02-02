@@ -499,15 +499,11 @@ def generate_initial_condition(x_ref, disturbance_level):
     return x_ref + disturbance_level * np.random.randn(*x_ref.shape)
 
 if __name__ == "__main__":
-    # Set up file paths
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_dir = os.path.dirname(current_dir)
-    csv_path = os.path.join(project_dir, 'traj', 'optimal_trajectories.csv')
 
     try:
         # Load trajectory data from CSV
-        df = pd.read_csv(csv_path)
-        print("Available columns in CSV:", df.columns.tolist())
+        df = pd.read_csv('traj/optimal_trajectories.csv')
+        print("Available columns in CSV:", df.columns)
         
         # Extract state and input trajectories
         xx_traj = np.array([
