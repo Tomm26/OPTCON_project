@@ -25,9 +25,9 @@ if __name__ == "__main__":
     T = 10.0  # Total time
     x_waypoints = np.array([
         [0, 0, 0, 0], 
-        [np.deg2rad(45), -np.deg2rad(30), 0, 0],
-        [np.deg2rad(-60), np.deg2rad(30), 0, 0],
-        [np.deg2rad(70), -np.deg2rad(70), 0, 0]
+        [np.deg2rad(45), -np.deg2rad(45), 0, 0],
+        [-np.deg2rad(60), np.deg2rad(60), 0, 0],
+        [np.deg2rad(80), -np.deg2rad(80), 0, 0]
         ])
     waypoint_times = np.linspace(0, T, len(x_waypoints))
 
