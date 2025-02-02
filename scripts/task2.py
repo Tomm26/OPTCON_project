@@ -13,8 +13,8 @@ if __name__ == "__main__":
     RR = 0.001*np.eye(1)
     QQT = np.diag([60.0, 60.0, 3.0, 3.0])
 
-    plot = True
-    plot_armijo = True
+    plot = False
+    plot_armijo = False
     save_traj = True
     
     # Initialize system
