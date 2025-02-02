@@ -2,12 +2,10 @@
 Task 4: MPC Control Implementation for Flexible Robotic Arm System
 This implementation focuses on Model Predictive Control (MPC) for trajectory tracking
 """
-import os
 import numpy as np
-from numpy import diag, eye, array, hstack, zeros, ones
+from numpy import diag, eye, zeros
 import pandas as pd
 from datetime import datetime
-import cvxopt
 from cvxopt import matrix, solvers
 from enum import Enum
 import matplotlib.pyplot as plt
