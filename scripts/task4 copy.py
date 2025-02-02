@@ -457,14 +457,10 @@ def plot_mpc_results(results):
     
     # Save plots to file
     try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_dir = os.path.dirname(current_dir)
-        plots_dir = os.path.join(project_dir, 'plots')
-        os.makedirs(plots_dir, exist_ok=True)
-        
-        fig.savefig(os.path.join(plots_dir, 'mpc_tracking.png'))
-        fig2.savefig(os.path.join(plots_dir, 'mpc_performance.png'))
-        print(f"Plots saved in {plots_dir}")
+      
+        fig.savefig('plots/mpc_tracking.png')
+        fig2.savefig('plots/mpc_performance.png')
+        print("Plots saved")
     except Exception as e:
         print(f"Error saving plots: {e}")
     
@@ -531,7 +527,7 @@ if __name__ == "__main__":
         plot_mpc_results(results)
         
     except FileNotFoundError:
-        print(f"Error: Could not find trajectory file at {csv_path}")
+        print("Error: Could not find trajectory file")
     except KeyError as e:
         print(f"Error: Column not found in CSV file: {e}")
         print("Available columns:", df.columns.tolist() if 'df' in locals() else "CSV not loaded")
