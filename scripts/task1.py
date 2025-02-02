@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from dynamics import FlexibleRoboticArm
 from cost import Cost
 from traj import TrajectoryGenerator, TrajectoryType
@@ -9,9 +8,9 @@ from animate import FlexibleRobotAnimator
 
 if __name__ == "__main__":
 
-    QQ = np.diag([10.0, 10.0, 0.1, 0.1])
-    RR = 0.001*np.eye(1)
-    QQT = np.diag([20.0, 20.0, 3.0, 3.0])
+    QQ = np.diag([5.0, 6.0, 0.7, 0.7])
+    RR = 0.0005*np.eye(1)
+    QQT = np.diag([50.0, 40.0, 10.0, 10.0])
 
     plot = False
     plot_armijo = False

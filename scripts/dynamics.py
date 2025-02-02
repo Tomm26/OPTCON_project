@@ -174,6 +174,21 @@ class FlexibleRoboticArm:
 
         return AA_traj, BB_traj
 
+    def _augmented_ode(self, t, aug, in_u, sys_params):
+        ns = self.ns
+        x = aug[:ns]
+        X = aug[ns:ns + ns * ns].reshape(ns, ns)
+        Y = aug[ns + ns * ns:].reshape(ns, self.ni)
+        
+        dxdt = self.continuous_dynamics(x, in_u)
+        A = np.array(self._lambda_grad(*x, *in_u, *sys_params))
+        B = np.array(self._lambda_grad_u(*x, *in_u, *sys_params))
+        
+        dXdt = A @ X
+        dYdt = A @ Y + B
+        
+        return np.concatenate([dxdt, dXdt.flatten(), dYdt.flatten()])
+
     def get_gradients(self, 
                     state: npt.NDArray[np.float64], 
                     in_u: npt.NDArray[np.float64]
@@ -221,28 +236,9 @@ class FlexibleRoboticArm:
             Y0 = np.zeros((ns, ni))
             aug0 = np.concatenate([x0, X0.flatten(), Y0.flatten()])
 
-            def augmented_ode(t, aug):
-                # Extract state and reshape sensitivity matrices.
-                x = aug[:ns]
-                X = aug[ns:ns + ns * ns].reshape(ns, ns)
-                Y = aug[ns + ns * ns:].reshape(ns, ni)
-
-                # Continuous dynamics for the state.
-                dxdt = self.continuous_dynamics(x, in_u)
-
-                # Jacobians: A = ∂f/∂x and B = ∂f/∂u.
-                A = np.array(self._lambda_grad(*x, *in_u, *sys_params))
-                B = np.array(self._lambda_grad_u(*x, *in_u, *sys_params))
-
-                # Sensitivity equations:
-                dXdt = A @ X
-                dYdt = A @ Y + B
-
-                return np.concatenate([dxdt, dXdt.flatten(), dYdt.flatten()])
-
             # Integrate the augmented system over [0, dt] using RK23.
             sol = solve_ivp(
-                augmented_ode,
+                lambda t, aug: self._augmented_ode(t, aug, in_u, sys_params),
                 t_span=[0, dt],
                 y0=aug0,
                 method='RK23',
@@ -293,8 +289,9 @@ class FlexibleRoboticArm:
         """Create lambda functions for gradients."""
         pars = sy.Matrix([[*self._sym_vars]])
         
-        self._lambda_grad = sy.lambdify(pars, self._sym_grad)
-        self._lambda_grad_u = sy.lambdify(pars, self._sym_grad_u)
+        self._lambda_grad = sy.lambdify(pars, self._sym_grad, modules='numpy')
+        self._lambda_grad_u = sy.lambdify(pars, self._sym_grad_u, modules='numpy')
+
 
 if __name__ == "__main__":
     # Create an instance of the FlexibleRoboticArm
