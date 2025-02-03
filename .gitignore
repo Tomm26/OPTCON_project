@@ -17,6 +17,7 @@ ressources/
 data/*.h5
 venv/
 .venv/
+.vscode
 
 ################################
 ########### PYTHON #############
