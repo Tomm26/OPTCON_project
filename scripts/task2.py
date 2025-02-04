@@ -5,44 +5,37 @@ from cost import Cost
 from traj import TrajectoryGenerator, TrajectoryType
 from newton import NewtonOptimizer
 from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters
+from parameters import Q2, R2, QT2
 from animate import FlexibleRobotAnimator
 
 if __name__ == "__main__":
 
-    QQ = np.diag([60.0, 60.0, 0.4, 0.4])
-    RR = 0.001*np.eye(1)
-    QQT = np.diag([60.0, 60.0, 3.0, 3.0])
-
+    T = 10.0  # Total time
     plot = False
     plot_armijo = False
     save_traj = True
     
     # Initialize system
     arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, method='euler')
-    cost = Cost(QQ, RR, QQT)
+    cost = Cost(Q2, R2, QT2)
     
     # Create reference trajectory
-    T = 10.0  # Total time
     x_waypoints = np.array([
         [0, 0, 0, 0], 
         [np.deg2rad(45), -np.deg2rad(45), 0, 0],
         [-np.deg2rad(60), np.deg2rad(60), 0, 0],
         [np.deg2rad(80), -np.deg2rad(80), 0, 0]
         ])
-    waypoint_times = np.linspace(0, T, len(x_waypoints))
+    waypoint_times = np.linspace(0, T-0.7, len(x_waypoints))
 
     
-    print('Generating reference trajectory...')
+    print('\nGenerating reference trajectory...\n')
     traj_gen = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
     x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.CUBIC)
-    print('Reference trajectory generated.')
+    print('Reference trajectory generated.\n')
 
     if plot:
         traj_gen.plot_trajectory(TrajectoryType.CUBIC)
-
-    # Save x0 and remove it from x_ref
-    x0 = x_ref[0]
-    x_ref = x_ref[1:]
 
     x_ref = x_ref.T
     u_ref = np.zeros((1, x_ref.shape[1]))
@@ -50,10 +43,9 @@ if __name__ == "__main__":
     # Initialize optimizer
     optimizer = NewtonOptimizer(arm, cost, dt, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters)
     
-    print('Optimizing...')
-    # Run optimization
+    print('Optimizing...\n')
     x_optimal, u_optimal, costs = optimizer.newton_optimize(x_ref, u_ref, 
-                                            max_iters=14, 
+                                            max_iters=25, 
                                             threshold_grad=1e-3,
                                             use_armijo=True,
                                             show_plots_armijo=plot_armijo)

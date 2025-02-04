@@ -34,29 +34,21 @@ class NewtonOptimizer:
         
         if self.cost.get_QT() is None:
             
-            _, A, B = self.dynamics(xx_ref[:, -1], uu_ref[:, -1])
-            qt = dare(A, B, self.cost.Q, self.cost.R)[0]
-            self.cost.set_QT(qt)
-            print('QT computed :\n', qt)
-        
-    def dynamics(self, x, u):
-        """Wrapper for arm dynamics that returns next state and gradients."""
-
-        x_next = self.arm.discrete_dynamics(x, u)
-        grad_x, grad_u = self.arm.get_gradients(x, u)
-
-        return x_next, grad_x, grad_u
+            A, B = self.arm.get_gradients(xx_ref[:, -1], uu_ref[:, -1])
+            Q = self.cost.get_Q()
+            R = self.cost.get_R()
+            self.cost.set_QT(dare(A, B, Q, R)[0])
+            print('QT computed :\n', self.cost.get_QT())
 
     def stagecost(self, x, u, x_ref, u_ref):
         """Wrapper for stage cost that matches optimizer interface."""
-        ll, grad_x, grad_u, Q, R = self.cost.stage_cost(x, u, x_ref, u_ref)
-        S = np.zeros((ni, ns))
+        ll, grad_x, grad_u, Q, S, R = self.cost.stage_cost(x, u, x_ref, u_ref)
         return ll, grad_x, grad_u, Q, S, R
 
     def termcost(self, x, x_ref):
         """Wrapper for terminal cost that matches optimizer interface."""
-        lT, grad_x, Q = self.cost.terminal_cost(x, x_ref)
-        return lT, grad_x, Q
+        lT, grad_x, QT = self.cost.terminal_cost(x, x_ref)
+        return lT, grad_x, QT
 
     def select_stepsize(self, xx_ref, uu_ref, x0, xx, uu, JJ, descent_arm, KK, sigma, TT, plot=False):
         """
@@ -76,7 +68,7 @@ class NewtonOptimizer:
 
             for tt in range(TT - 1):
                 uu_temp[:, tt] = uu[:, tt] + KK[:, :, tt] @ (xx_temp[:, tt] - xx[:, tt]) + stepsize * sigma[:, tt]
-                xx_temp[:, tt + 1] = self.dynamics(xx_temp[:, tt], uu_temp[:, tt])[0]
+                xx_temp[:, tt + 1] = self.arm.discrete_dynamics(xx_temp[:, tt], uu_temp[:, tt])
 
             # Temporary cost calculation
             JJ_temp = 0
@@ -135,8 +127,7 @@ class NewtonOptimizer:
             
             # Compute next states for all trajectories
             for i in range(len(steps)):
-                xx_temp_all[i, :, tt + 1] = self.dynamics(xx_temp_all[i, :, tt], 
-                                                        uu_temp_all[i, :, tt])[0]
+                xx_temp_all[i, :, tt + 1] = self.arm.discrete_dynamics(xx_temp_all[i, :, tt], uu_temp_all[i, :, tt])
 
         # Compute costs efficiently
         for i in range(len(steps)):
@@ -316,15 +307,15 @@ class NewtonOptimizer:
         # Set initial conditions
         x0 = xx_ref[:, 0]
         xx[:, 0, 0] = x0
-        uu[:, :, 0] = np.repeat(uu_ref[:, 0].reshape(-1, 1), TT, axis=1)
 
         # Initialize first trajectory
-        for tt in range(1, TT-1):
-            xx[:, tt+1, 0] = self.dynamics(xx[:, tt, 0], uu[:, tt, 0])[0]
+        for tt in range(TT - 1):
+            xx[:, tt+1, 0] = self.arm.discrete_dynamics(xx[:, tt, 0], uu[:, tt, 0])
 
         JJ = np.zeros(max_iters-1)
 
         for kk in range(max_iters-1):
+
             # Initialize matrices
             QQt = np.zeros((ns, ns, TT))
             RRt = np.zeros((ni, ni, TT))
@@ -356,7 +347,7 @@ class NewtonOptimizer:
                 rrt[:, tt] = rrtemp
 
                 # Dynamics linearization
-                _, AA[:, :, tt], BB[:, :, tt] = self.dynamics(xx[:, tt, kk], uu[:, tt, kk])
+                AA[:, :, tt], BB[:, :, tt] = self.arm.get_gradients(xx[:, tt, kk], uu[:, tt, kk])
 
                 # Costate equation
                 lmbda[:,tt, kk] = qqt[:,tt] + AA[:,:,tt].T @ lmbda[:,tt+1, kk]
@@ -370,18 +361,16 @@ class NewtonOptimizer:
 
             if normGrad < threshold_grad:
                 print("Optimization finished: gradient norm is below threshold")
-                return xx[:, :, :kk+1], uu[:, :, :kk+1], JJ[:kk+1]
+                return xx[:, :, :kk], uu[:, :, :kk], JJ[:kk]
 
             # LQP solution
-            KK, sigma, _, _, deltau = self.solve_lqp(AA, BB, QQt, RRt, SSt, QQt[:,:,-1], TT,np.zeros_like(x0), qqt, rrt, qqT)
+            KK, sigma, _, _, deltau = self.solve_lqp(AA, BB, QQt, RRt, SSt, self.cost.QT, TT, np.zeros_like(x0), qqt, rrt, qqT)
 
             # Step size selection
             if use_armijo:
                 descent_arm = 0
                 for tt in range(TT-1):
                     descent_arm += grdJdu[:, tt, kk].T @ deltau[:,tt]
-
-                # descent_arm = (deltau @ grdJdu[:, :, kk].T).squeeze()
 
                 stepsize = self.select_stepsize(
                     xx_ref, uu_ref, x0, xx[:, :, kk], uu[:, :, kk], 
@@ -395,7 +384,7 @@ class NewtonOptimizer:
             xx[:, 0, kk+1] = x0
             for tt in range(TT-1):
                 uu[:, tt, kk+1] = (uu[:, tt, kk] + KK[:, :, tt] @ (xx[:, tt, kk+1] - xx[:, tt, kk]) + stepsize * sigma[:, tt])
-                xx[:, tt+1, kk+1] = self.dynamics(xx[:, tt, kk+1], uu[:, tt, kk+1])[0]
+                xx[:, tt+1, kk+1] = self.arm.discrete_dynamics(xx[:, tt, kk+1], uu[:, tt, kk+1])
 
         print("\nOptimization finished: maximum iterations reached")
         return xx, uu, JJ

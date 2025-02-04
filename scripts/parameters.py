@@ -17,14 +17,14 @@ fixed_stepsize = 0.7
 stepsize_0 = 1.0
 cc = 0.5
 beta = 0.7
-armijo_maxiters = 15
+armijo_maxiters = 10
 
 # Task1
-Q1 = np.diag([3.0, 2.0, 0.1, 0.1])
-R1 = 0.001*np.eye(1)
+Q1 = np.diag([7.5, 7.5, 1.0, 1.0]) # 15 40 15 13
+R1 = 0.0001*np.eye(1)
 QT1 = None
 
 # Task2
-Q2 = np.diag([5.0, 6.0, 0.7, 0.7])
-R2 = 0.0005*np.eye(1)
+Q2 = np.diag([70.0, 100.0, 10.0, 10.0])
+R2 = 0.001*np.eye(1)
 QT2 = None

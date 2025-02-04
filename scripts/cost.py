@@ -8,6 +8,7 @@ class Cost:
         self.Q = np.diag([1.0, 1.0, 1.0, 1.0]) if QQt is None else QQt
         self.R = 0.01 * np.eye(ni) if RRt is None else RRt
         self.QT = QQT
+        self.S = np.zeros((ni, ns))
         
     def _check_cost_matrices(self):
         assert self.Q.shape == (self.ns, self.ns), f"Q must be {self.ns}x{self.ns}"
@@ -30,7 +31,7 @@ class Cost:
 
         grad_x = self.Q @ x_dev
         grad_u = self.R @ u_dev
-        return ll, grad_x, grad_u, self.Q, self.R
+        return ll, grad_x, grad_u, self.Q, self.S, self.R
     
     def terminal_cost(self, x, x_ref):
         self._check_cost_matrices()
@@ -45,12 +46,29 @@ class Cost:
     def get_QT(self):
         return self.QT
 
+    def get_Q(self):
+        return self.Q
+    
+    def get_R(self):
+        return self.R
+    
     def set_QT(self, new_QT):
 
         if new_QT.shape != (self.ns, self.ns):
             raise ValueError(f"Terminal cost matrix QT must be of shape ({self.ns}, {self.ns})")
         self.QT = new_QT
 
+    def set_Q(self, new_Q):
+
+        if new_Q.shape != (self.ns, self.ns):
+            raise ValueError(f"Q must be of shape ({self.ns}, {self.ns})")
+        self.Q = new_Q
+
+    def set_R(self, new_R):
+
+        if new_R.shape != (self.ni, self.ni):
+            raise ValueError(f"R must be of shape ({self.ni}, {self.ni})")
+        self.R = new_R
 
 if __name__ == "__main__":
 

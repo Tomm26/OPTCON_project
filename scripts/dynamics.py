@@ -150,9 +150,7 @@ class FlexibleRoboticArm:
                 lambda t, x: self.continuous_dynamics(x, u),
                 t_span=[0, self.params['dt']],
                 y0=x,
-                method='RK23',
-                rtol=1e-6,
-                atol=1e-6
+                method='RK23'
             )
             return sol.y[:, -1]
         else:
@@ -243,8 +241,6 @@ class FlexibleRoboticArm:
                 y0=aug0,
                 method='RK23',
                 t_eval=[dt],
-                rtol=1e-6,
-                atol=1e-6
             )
             aug_final = sol.y[:, -1]
             gradx = aug_final[ns:ns + ns * ns].reshape(ns, ns)
@@ -287,10 +283,10 @@ class FlexibleRoboticArm:
 
     def _create_lambda_functions(self) -> None:
         """Create lambda functions for gradients."""
-        pars = sy.Matrix([[*self._sym_vars]])
+        # pars = sy.Matrix([[*self._sym_vars]])
         
-        self._lambda_grad = sy.lambdify(pars, self._sym_grad, modules='numpy')
-        self._lambda_grad_u = sy.lambdify(pars, self._sym_grad_u, modules='numpy')
+        self._lambda_grad = sy.lambdify(self._sym_vars, self._sym_grad, modules='numpy')
+        self._lambda_grad_u = sy.lambdify(self._sym_vars, self._sym_grad_u, modules='numpy')
 
 
 if __name__ == "__main__":

@@ -36,10 +36,9 @@ if __name__ == "__main__":
     optimizer = NewtonOptimizer(arm, cost, dt, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters)
     
     print('Optimizing...\n')
-    # Run optimization
     x_optimal, u_optimal, costs = optimizer.newton_optimize(x_ref, u_ref, 
                                             max_iters=100, 
-                                            threshold_grad=1e-3,
+                                            threshold_grad=1e-2,
                                             use_armijo=True,
                                             show_plots_armijo=plot_armijo)
     
