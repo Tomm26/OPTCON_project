@@ -21,10 +21,10 @@ if __name__ == "__main__":
     waypoint_times = np.array([0, T/2])
     x_waypoints = np.array([[0, 0, 0, 0], [np.pi, 0, 0, 0]])
     
-    print('Generating reference trajectory...')
+    print('Generating reference trajectory...\n')
     traj_gen = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
     x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.STEP)
-    print('Reference trajectory generated.')
+    print('Reference trajectory generated.\n')
 
     if plot:
         traj_gen.plot_trajectory(TrajectoryType.STEP)
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     # Initialize optimizer
     optimizer = NewtonOptimizer(arm, cost, dt, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters)
     
-    print('Optimizing...')
+    print('Optimizing...\n')
     # Run optimization
     x_optimal, u_optimal, costs = optimizer.newton_optimize(x_ref, u_ref, 
                                             max_iters=25, 
