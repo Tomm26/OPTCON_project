@@ -6,7 +6,7 @@ from parameters import ns, ni, dt
 from control import dare
 
 class NewtonOptimizer:
-    def __init__(self, arm:FlexibleRoboticArm, cost:Cost, dt=dt, fixed_stepsize=0.7, stepsize_0=1, cc=0.5, beta=0.7, armijo_maxiters=15):
+    def __init__(self, arm:FlexibleRoboticArm, cost:Cost = None, dt=dt, fixed_stepsize=0.7, stepsize_0=1, cc=0.5, beta=0.7, armijo_maxiters=15):
         """
         Initialize the Newton Optimizer.
         
@@ -168,7 +168,7 @@ class NewtonOptimizer:
         plt.legend()
         plt.show()
 
-    def solve_lqp(self, AAin, BBin, QQin, RRin, SSin, QQfin, TT, x0, qqin, rrin, qqfin):
+    def affine_lqp(self, AAin, BBin, QQin, RRin, SSin, QQfin, TT, x0, qqin, rrin, qqfin):
         """
         Affine Linear Quadratic Optimal Control Problem Solver
         """
@@ -364,7 +364,7 @@ class NewtonOptimizer:
                 return xx[:, :, :kk], uu[:, :, :kk], JJ[:kk]
 
             # LQP solution
-            KK, sigma, _, _, deltau = self.solve_lqp(AA, BB, QQt, RRt, SSt, self.cost.QT, TT, np.zeros_like(x0), qqt, rrt, qqT)
+            KK, sigma, _, _, deltau = self.affine_lqp(AA, BB, QQt, RRt, SSt, self.cost.QT, TT, np.zeros_like(x0), qqt, rrt, qqT)
 
             # Step size selection
             if use_armijo:
