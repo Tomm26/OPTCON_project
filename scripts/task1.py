@@ -21,7 +21,7 @@ if __name__ == "__main__":
     waypoint_times = np.array([0, T/2])
     x_waypoints = np.array([[0, 0, 0, 0], [np.pi, 0, 0, 0]])
     
-    print('Generating reference trajectory...\n')
+    print('\nGenerating reference trajectory...\n')
     traj_gen = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
     x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.STEP)
     print('Reference trajectory generated.\n')

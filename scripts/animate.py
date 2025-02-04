@@ -108,7 +108,7 @@ class FlexibleRobotAnimator:
         anim = FuncAnimation(self.fig, self.update,
                            init_func=self.init_animation,
                            frames=len(self.trajectory),
-                           interval=self.dt*500,
+                           interval=self.dt*1000,
                            blit=True)
         
         if save_path:
