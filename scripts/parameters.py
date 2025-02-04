@@ -1,7 +1,7 @@
 import numpy as np
 
 # discretization step
-dt = 1e-3
+dt = 1e-2
 
 #number of states
 ns = 4
@@ -20,11 +20,11 @@ beta = 0.7
 armijo_maxiters = 15
 
 # Task1
-Q1 = np.diag([10.0, 10.0, 0.01, 0.01])
+Q1 = np.diag([3.0, 2.0, 0.1, 0.1])
 R1 = 0.001*np.eye(1)
 QT1 = None
 
 # Task2
 Q2 = np.diag([5.0, 6.0, 0.7, 0.7])
 R2 = 0.0005*np.eye(1)
-QT2 = np.diag([50.0, 40.0, 10.0, 10.0])
+QT2 = None

@@ -37,7 +37,7 @@ class NewtonOptimizer:
             _, A, B = self.dynamics(xx_ref[:, -1], uu_ref[:, -1])
             qt = dare(A, B, self.cost.Q, self.cost.R)[0]
             self.cost.set_QT(qt)
-            print('QT computed :', qt)
+            print('QT computed :\n', qt)
         
     def dynamics(self, x, u):
         """Wrapper for arm dynamics that returns next state and gradients."""
