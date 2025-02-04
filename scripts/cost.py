@@ -7,12 +7,12 @@ class Cost:
         self.ni = ni
         self.Q = np.diag([1.0, 1.0, 1.0, 1.0]) if QQt is None else QQt
         self.R = 0.01 * np.eye(ni) if RRt is None else RRt
-        self.QT = np.diag([1.0, 1.0, 1.0, 1.0]) if QQT is None else QQT
-        self._check_cost_matrices()
+        self.QT = QQT
         
     def _check_cost_matrices(self):
         assert self.Q.shape == (self.ns, self.ns), f"Q must be {self.ns}x{self.ns}"
         assert self.R.shape == (self.ni, self.ni), f"R must be {self.ni}x{self.ni}"
+        assert self.QT.shape == (self.ns, self.ns), f"QT must be {self.ns}x{self.ns}"
         
     def _check_dimensions(self, x, u, x_ref, u_ref):
         assert x.shape == (self.ns,), f"State must be {self.ns}-dimensional"
@@ -21,6 +21,7 @@ class Cost:
         assert u_ref.shape == (self.ni,), f"Reference input must be {self.ni}-dimensional"
         
     def stage_cost(self, x, u, x_ref, u_ref):
+        self._check_cost_matrices()
         self._check_dimensions(x, u, x_ref, u_ref)
         x_dev = x - x_ref
         u_dev = u - u_ref
@@ -32,6 +33,7 @@ class Cost:
         return ll, grad_x, grad_u, self.Q, self.R
     
     def terminal_cost(self, x, x_ref):
+        self._check_cost_matrices()
         self._check_dimensions(x, np.zeros(self.ni), x_ref, np.zeros(self.ni))
         x_dev = x - x_ref
 
@@ -39,6 +41,15 @@ class Cost:
 
         grad_x = self.QT @ x_dev
         return lT, grad_x, self.QT
+
+    def get_QT(self):
+        return self.QT
+
+    def set_QT(self, new_QT):
+
+        if new_QT.shape != (self.ns, self.ns):
+            raise ValueError(f"Terminal cost matrix QT must be of shape ({self.ns}, {self.ns})")
+        self.QT = new_QT
 
 
 if __name__ == "__main__":

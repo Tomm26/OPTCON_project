@@ -4,7 +4,6 @@ from dynamics import FlexibleRoboticArm
 from cost import Cost
 import pandas as pd
 from newton import NewtonOptimizer
-from utils import generate_initial_input_trajectory_2
 from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters
 from animate import FlexibleRobotAnimator
 
@@ -28,7 +27,7 @@ if __name__ == "__main__":
 
     # Load optimized trajectory
     # Load trajectory data from CSV
-    df = pd.read_csv('OPTCON_project_giorgio/OPTCON_project/traj/optimal_trajectories.csv')
+    df = pd.read_csv('traj/optimal_trajectories.csv')
     print("Available columns in CSV:", df.columns)
     
     # Extract state and input trajectories
@@ -63,7 +62,7 @@ if __name__ == "__main__":
     
     # Define different kinds of disturbances
     impulse_torque = False
-    gaussian_noise = False
+    gaussian_noise = True
     perturbed_state = False
     perturbed_params = False
 

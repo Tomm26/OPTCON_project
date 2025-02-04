@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 from dynamics import FlexibleRoboticArm
 from cost import Cost
 from parameters import ns, ni, dt
+from control import dare
 
 class NewtonOptimizer:
     def __init__(self, arm:FlexibleRoboticArm, cost:Cost, dt=dt, fixed_stepsize=0.7, stepsize_0=1, cc=0.5, beta=0.7, armijo_maxiters=15):
@@ -28,7 +29,16 @@ class NewtonOptimizer:
         self.beta = beta
         self.armijo_maxiters = armijo_maxiters
         self.fixed_stepsize = fixed_stepsize
-
+    
+    def check_qt(self, xx_ref, uu_ref):
+        
+        if self.cost.get_QT() is None:
+            
+            _, A, B = self.dynamics(xx_ref[:, -1], uu_ref[:, -1])
+            qt = dare(A, B, self.cost.Q, self.cost.R)[0]
+            self.cost.set_QT(qt)
+            print('QT computed :', qt)
+        
     def dynamics(self, x, u):
         """Wrapper for arm dynamics that returns next state and gradients."""
 
@@ -294,6 +304,9 @@ class NewtonOptimizer:
             xx: Optimized state trajectories
             uu: Optimized input trajectories
         """
+
+        self.check_qt(xx_ref, uu_ref)
+
         TT = xx_ref.shape[1]
         
         # Initialize sequences
