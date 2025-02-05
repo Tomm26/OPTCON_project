@@ -21,10 +21,20 @@ armijo_maxiters = 10
 
 # Task1
 Q1 = np.diag([20.0, 20.0, 1.0, 1.0]) # 15 40 15 13
-R1 = 0.001*np.eye(1)
+R1 = 0.0005*np.eye(1)
 QT1 = None
 
 # Task2
 Q2 = np.diag([15.0, 15.0, 1.0, 1.0])
 R2 = 0.0005*np.eye(1)
 QT2 = None
+
+# LQR
+Q3 = np.diag([15.0, 15.0, 1.0, 1.0])
+R3 = 0.0005 * np.eye(1)
+QT3 = np.diag([20.0, 20.0, 1.0, 1.0])
+
+# MPC
+Q4 = np.diag([30.0, 30.0, 1.0, 1.0])
+R4 = 0.00001 * np.eye(1)
+N4 = 10

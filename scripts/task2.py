@@ -7,7 +7,7 @@ from newton import NewtonOptimizer
 from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters
 from parameters import Q2, R2, QT2
 from animate import FlexibleRobotAnimator
-from utils import generate_initial_input_trajectory
+from utils import generate_u_ref
 from matplotlib import pyplot as plt
 
 if __name__ == "__main__":
@@ -33,7 +33,7 @@ if __name__ == "__main__":
     print('\nGenerating reference trajectory...\n')
     traj_gen = TrajectoryGenerator(x_waypoints, waypoint_times, T, dt)
     x_ref, t_array = traj_gen.generate_trajectory(TrajectoryType.CUBIC)
-    u_ref = generate_initial_input_trajectory(arm, x_ref)
+    u_ref = generate_u_ref(arm, x_ref)
     print('Reference trajectory generated.\n')
 
     if plot:
@@ -50,8 +50,6 @@ if __name__ == "__main__":
         plt.legend()
         plt.grid(True)
         plt.show()
-
-
 
     x_ref = x_ref.T
     u_ref = u_ref.T

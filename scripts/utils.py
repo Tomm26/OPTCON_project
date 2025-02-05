@@ -2,7 +2,7 @@ import numpy as np
 from dynamics import FlexibleRoboticArm
 
 
-def generate_initial_input_trajectory(arm:FlexibleRoboticArm, x_traj, max_iter=100, step_size=0.1, tol=1e-4):
+def generate_u_ref(arm:FlexibleRoboticArm, x_traj, max_iter=100, step_size=0.1, tol=1e-4):
     """
     Gravity Compensation
     """
