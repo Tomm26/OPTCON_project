@@ -103,6 +103,9 @@ class FlexibleRoboticArm:
             self._e * sin_sum
         ])
 
+    def friction_matrix(self, dtheta1: float, dtheta2: float):
+        return self._friction_matrix @ np.array([dtheta1, dtheta2])
+    
     def continuous_dynamics(self, x: npt.NDArray[np.float64], 
                           u: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         """
@@ -121,11 +124,12 @@ class FlexibleRoboticArm:
         M = self.mass_matrix(theta2)
         C = self.coriolis_vector(theta2, dtheta1, dtheta2)
         G = self.gravity_vector(theta1, theta2)
+        F = self.friction_matrix(dtheta1, dtheta2)
         
         # Compute acceleration
         ddtheta = np.linalg.solve(
             M,
-            np.array([u[0], 0]) - C - self._friction_matrix @ np.array([dtheta1, dtheta2]) - G
+            np.array([u[0], 0]) - C - F - G
         )
         
         return np.array([dtheta1, dtheta2, ddtheta[0], ddtheta[1]])
