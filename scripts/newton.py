@@ -67,6 +67,7 @@ class NewtonOptimizer:
             xx_temp[:, 0] = x0
 
             for tt in range(TT - 1):
+                
                 uu_temp[:, tt] = uu[:, tt] + KK[:, :, tt] @ (xx_temp[:, tt] - xx[:, tt]) + stepsize * sigma[:, tt]
                 xx_temp[:, tt + 1] = self.arm.discrete_dynamics(xx_temp[:, tt], uu_temp[:, tt])
 
@@ -105,8 +106,8 @@ class NewtonOptimizer:
         Plots the cost as a function of the stepsize in the Armijo rule.
         Optimized version using vectorized operations.
         """
-        # Generate uniform stepsize grid
-        steps = np.linspace(0, stepsize_0, 40)
+        # Generate uniform stepsize grid (ridotto il numero di punti)
+        steps = np.linspace(0, stepsize_0, 10)  # Ridotto da 20 a 10 punti
         costs = np.zeros(len(steps))
 
         # Pre-allocate arrays for all steps at once
@@ -121,7 +122,9 @@ class NewtonOptimizer:
             feedback_term = np.einsum('ijk,lj->li', KK[:, :, tt:tt+1], state_diff)
             stepsize_term = np.outer(steps, sigma[:, tt])
             
-            uu_temp_all[:, :, tt] = (uu[:, tt] + feedback_term + stepsize_term)
+            uu_temp_all[:, :, tt] = (uu[:, tt] + 
+                                    feedback_term + 
+                                    stepsize_term)
             
             # Compute next states for all trajectories
             for i in range(len(steps)):
@@ -135,7 +138,9 @@ class NewtonOptimizer:
             
             # Vectorize stage cost computation
             stage_costs = np.array([
-                self.stagecost(xx_temp[:, t], uu_temp[:, t], xx_ref[:, t], uu_ref[:, t])[0] for t in range(TT - 1)
+                self.stagecost(xx_temp[:, t], uu_temp[:, t],
+                            xx_ref[:, t], uu_ref[:, t])[0]
+                for t in range(TT - 1)
             ])
             JJ_temp = np.sum(stage_costs)
             
@@ -298,11 +303,12 @@ class NewtonOptimizer:
         
         # Initialize sequences
         xx = np.zeros((ns, TT, max_iters))
-        uu = np.zeros((ni, TT, max_iters))
+        uu = np.zeros((ni, TT-1, max_iters))
 
         # Set initial conditions
         x0 = xx_ref[:, 0]
         xx[:, 0, 0] = x0
+        
 
         # Initialize first trajectory
         for tt in range(TT - 1):
@@ -382,6 +388,7 @@ class NewtonOptimizer:
                 uu[:, tt, kk+1] = (uu[:, tt, kk] + KK[:, :, tt] @ (xx[:, tt, kk+1] - xx[:, tt, kk]) + stepsize * sigma[:, tt])
                 xx[:, tt+1, kk+1] = self.arm.discrete_dynamics(xx[:, tt, kk+1], uu[:, tt, kk+1])
 
+
         print("\nOptimization finished: maximum iterations reached")
         return xx, uu, JJ
 
@@ -424,14 +431,14 @@ class NewtonOptimizer:
         
         # Plot input trajectory
         ax = axs[4]
-        ax.plot(range(TT), uu_ref[0], 'r--', label='Reference', linewidth=2)
+        ax.plot(range(TT-1), uu_ref[0], 'r--', label='Reference', linewidth=2)
         
         # Plot optimization iterations with increasing opacity
         for k in range(iterations):
             alpha = 0.2 + 0.8 * (k / (iterations - 1))
-            ax.plot(range(TT), uu[0, :, k], 'b-', alpha=alpha, linewidth=1)
+            ax.plot(range(TT-1), uu[0, :, k], 'b-', alpha=alpha, linewidth=1)
             
-        ax.plot(range(TT), uu[0, :, -1], 'g-', label='Optimized', linewidth=2)
+        ax.plot(range(TT-1), uu[0, :, -1], 'g-', label='Optimized', linewidth=2)
         ax.set_xlabel('Time step')
         ax.set_ylabel('Input torque')
         ax.grid(True)

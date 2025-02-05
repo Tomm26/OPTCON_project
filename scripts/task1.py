@@ -9,8 +9,8 @@ from animate import FlexibleRobotAnimator
 
 if __name__ == "__main__":
 
-    T = 3.3  # Total time
-    plot = False
+    T = 3.0  # Total time
+    plot = True
     plot_armijo = False
     
     # Initialize system
@@ -30,7 +30,7 @@ if __name__ == "__main__":
         traj_gen.plot_trajectory(TrajectoryType.STEP)
 
     x_ref = x_ref.T
-    u_ref = np.zeros((ni, x_ref.shape[1]))
+    u_ref = np.zeros((ni, x_ref.shape[1]-1))
 
     # Initialize optimizer
     optimizer = NewtonOptimizer(arm, cost, dt, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters)
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     print('Optimizing...\n')
     x_optimal, u_optimal, costs = optimizer.newton_optimize(x_ref, u_ref, 
                                             max_iters=100, 
-                                            threshold_grad=1e-2,
+                                            threshold_grad=1e-6,
                                             use_armijo=True,
                                             show_plots_armijo=plot_armijo)
     

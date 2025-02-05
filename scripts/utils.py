@@ -49,7 +49,7 @@ def generate_initial_input_trajectory(arm:FlexibleRoboticArm, x_traj, max_iter=1
 
 def generate_initial_input_trajectory_2(arm:FlexibleRoboticArm, x_traj, max_iter=100, step_size=0.1, tol=1e-4):
     """
-    Generate initial input trajectory using gradient descent based on robot dynamics.
+    Generate initial input trajectory based on equilibrium
     
     Args:
         arm: FlexibleRoboticArm instance
@@ -65,24 +65,12 @@ def generate_initial_input_trajectory_2(arm:FlexibleRoboticArm, x_traj, max_iter
     u_traj = np.zeros((T, 1))  # Initialize input trajectory
     
     # For each timestep, find input that best achieves next state
+
     for t in range(T):
         x_current = [x_traj[t][0], -x_traj[t][0], 0,0]
-
-        diff_u = lambda uu: (arm.coriolis_vector(x_current[1], x_current[2], x_current[3]).reshape(2,1) + 
-                             arm.gravity_vector(x_current[0], x_current[1]).reshape(2,1) - np.concatenate((uu, np.array([0]))).reshape(2,1))
-        
-        uu = np.zeros((1, max_iter))
-        uu[:, 0] = 0
-
-        for k in range(max_iter-1):
-
-            uu[:, k+1] = uu[:, k] + (step_size * diff_u(uu[:, k]))[0]
-        
-            if np.abs(uu[:,k+1] - uu[:, k]) < tol:
                 
-                u_traj[t] = uu[:, k+1]
-                break
-                
-        u_traj[t] = uu[:, k+1]
+        u_traj[t] =  ( arm.gravity_vector(x_current[0], x_current[1]).reshape(2,1))[0]
+
+        
         
     return u_traj
