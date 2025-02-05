@@ -231,7 +231,7 @@ class SimulationManager:
     
     def run_lqr(self, x_ref: np.ndarray, u_ref: np.ndarray, 
                 disturbances: Dict) -> Tuple[np.ndarray, np.ndarray]:
-        """Esegui solo il controllore LQR"""
+        """Run only the LQR controller"""
         lqr = LQRController(
             self.arm,
             Q=Q3,
@@ -242,7 +242,7 @@ class SimulationManager:
     
     def run_mpc(self, x_ref: np.ndarray, u_ref: np.ndarray, 
                 disturbances: Dict) -> Tuple[np.ndarray, np.ndarray]:
-        """Esegui solo il controllore MPC"""
+        """Run only the MPC controller"""
         mpc = MPCController(
             self.arm,
             Q=Q4,
@@ -326,7 +326,7 @@ class SimulationManager:
     def plot_single(self, x_ref: np.ndarray, u_ref: np.ndarray, 
                     result: Tuple[np.ndarray, np.ndarray], controller_name: str,
                     save_plot: bool = True):
-        """Plot per un singolo controllore"""
+        """Plot simulation results for a single controller"""
         xx, uu = result
         T_ref = x_ref.shape[1]
         T_sim = xx.shape[1]
@@ -334,24 +334,24 @@ class SimulationManager:
         time = np.arange(T) * dt
         
         fig, axs = plt.subplots(5, 1, figsize=(12, 15), sharex=True)
-        fig.suptitle(f'Simulazione con {controller_name}', fontsize=16)
+        fig.suptitle(f'Simulation with {controller_name}', fontsize=16)
         
         state_labels = [r'$\theta_1$', r'$\theta_2$', 
                         r'$\dot{\theta}_1$', r'$\dot{\theta}_2$']
         for i in range(4):
             ax = axs[i]
-            ax.plot(time, x_ref[i, :T], 'k--', label='Riferimento', alpha=0.7)
+            ax.plot(time, x_ref[i, :T], 'k--', label='Reference', alpha=0.7)
             ax.plot(time, xx[i, :T], 'b-', label=controller_name, alpha=0.8)
             ax.set_ylabel(state_labels[i])
             ax.grid(True)
             ax.legend()
             
         ax = axs[4]
-        ax.plot(time, u_ref[0, :T], 'k--', label='Riferimento', alpha=0.7)
-        # Controllo: la traiettoria degli input ha una lunghezza T-1
+        ax.plot(time, u_ref[0, :T], 'k--', label='Reference', alpha=0.7)
+        # Note: The control input trajectory length is T-1
         ax.plot(time[:-1], uu[0, :(T-1)], 'b-', label=controller_name, alpha=0.8)
-        ax.set_ylabel('Input di Controllo u')
-        ax.set_xlabel('Tempo [s]')
+        ax.set_ylabel('Control Input u')
+        ax.set_xlabel('Time [s]')
         ax.grid(True)
         ax.legend()
         
@@ -359,9 +359,9 @@ class SimulationManager:
         if save_plot:
             try:
                 fig.savefig(f'plots/{controller_name.lower()}_simulation.png')
-                print(f"Plot per {controller_name} salvato correttamente")
+                print(f"Plot for {controller_name} saved successfully")
             except Exception as e:
-                print(f"Errore nel salvataggio del plot: {e}")
+                print(f"Error saving plot: {e}")
         plt.show()
 
 def main():
@@ -383,41 +383,41 @@ def main():
             "gaussian_std": 0.002,
         }
         
-        # Se si desidera perturbare anche i parametri del sistema
+        # If you want to also perturb the system parameters
         if disturbances.get("perturbed_params"):
             arm = FlexibleRoboticArm(m1 * 1.03, m2 * 1.05, l1 * 1.02, l2 * 1.04, r1, r2, I1, I2, g, f1, f2, dt, ns, ni)
         
         sim_manager = SimulationManager(arm)
         
-        # Scegli la modalità di simulazione
-        print("Seleziona la modalità di simulazione:")
-        print("1 - Solo LQR")
-        print("2 - Solo MPC")
-        print("3 - Confronto (LQR e MPC)")
-        mode = input("Inserisci 1, 2 o 3: ").strip()
+        # Choose simulation mode
+        print("Select simulation mode:")
+        print("1 - LQR only")
+        print("2 - MPC only")
+        print("3 - Comparison (LQR and MPC)")
+        mode = input("Enter 1, 2 or 3: ").strip()
         
         if mode == "1":
-            print("Esecuzione della simulazione con LQR...")
+            print("Running simulation with LQR...")
             result = sim_manager.run_lqr(x_ref, u_ref, disturbances)
             sim_manager.plot_single(x_ref, u_ref, result, "LQR")
             
         elif mode == "2":
-            print("Esecuzione della simulazione con MPC...")
+            print("Running simulation with MPC...")
             result = sim_manager.run_mpc(x_ref, u_ref, disturbances)
             sim_manager.plot_single(x_ref, u_ref, result, "MPC")
             
         elif mode == "3":
-            print("Esecuzione della simulazione per il confronto LQR vs MPC...")
+            print("Running simulation for LQR vs MPC comparison...")
             results = sim_manager.run_comparison(x_ref, u_ref, disturbances)
             sim_manager.plot_comparison(x_ref, u_ref, results)
             
-            # Esempio: per animare il risultato MPC (opzionale)
-            animate = input("Vuoi animare il risultato MPC? (s/n): ").strip().lower() == 's'
+            # Example: animate the MPC result (optional)
+            animate = input("Do you want to animate the MPC result? (y/n): ").strip().lower() == 'y'
             if animate:
                 animator = FlexibleRobotAnimator(results['mpc'][0].T, dt=dt)
                 animator.animate()
         else:
-            print("Modalità non valida. Terminazione del programma.")
+            print("Invalid mode. Terminating the program.")
         
     except FileNotFoundError:
         print("Error: Could not find trajectory file")
@@ -428,3 +428,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
