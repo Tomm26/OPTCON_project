@@ -9,7 +9,7 @@ from animate import FlexibleRobotAnimator
 
 if __name__ == "__main__":
 
-    T = 3.0  # Total time
+    T = 3.3  # Total time
     plot = False
     plot_armijo = False
     

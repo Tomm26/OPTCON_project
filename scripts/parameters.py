@@ -20,8 +20,8 @@ beta = 0.7
 armijo_maxiters = 10
 
 # Task1
-Q1 = np.diag([7.5, 7.5, 1.0, 1.0]) # 15 40 15 13
-R1 = 0.0001*np.eye(1)
+Q1 = np.diag([10.0, 10.0, 0.1, 0.1]) # 50, 80, 12, 12
+R1 = 0.001*np.eye(1)
 QT1 = None
 
 # Task2

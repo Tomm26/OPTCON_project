@@ -105,8 +105,8 @@ class NewtonOptimizer:
         Plots the cost as a function of the stepsize in the Armijo rule.
         Optimized version using vectorized operations.
         """
-        # Generate uniform stepsize grid (ridotto il numero di punti)
-        steps = np.linspace(0, stepsize_0, 10)  # Ridotto da 20 a 10 punti
+        # Generate uniform stepsize grid
+        steps = np.linspace(0, stepsize_0, 40)
         costs = np.zeros(len(steps))
 
         # Pre-allocate arrays for all steps at once
@@ -121,9 +121,7 @@ class NewtonOptimizer:
             feedback_term = np.einsum('ijk,lj->li', KK[:, :, tt:tt+1], state_diff)
             stepsize_term = np.outer(steps, sigma[:, tt])
             
-            uu_temp_all[:, :, tt] = (uu[:, tt] + 
-                                    feedback_term + 
-                                    stepsize_term)
+            uu_temp_all[:, :, tt] = (uu[:, tt] + feedback_term + stepsize_term)
             
             # Compute next states for all trajectories
             for i in range(len(steps)):
@@ -137,9 +135,7 @@ class NewtonOptimizer:
             
             # Vectorize stage cost computation
             stage_costs = np.array([
-                self.stagecost(xx_temp[:, t], uu_temp[:, t],
-                            xx_ref[:, t], uu_ref[:, t])[0]
-                for t in range(TT - 1)
+                self.stagecost(xx_temp[:, t], uu_temp[:, t], xx_ref[:, t], uu_ref[:, t])[0] for t in range(TT - 1)
             ])
             JJ_temp = np.sum(stage_costs)
             
