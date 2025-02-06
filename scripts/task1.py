@@ -14,10 +14,10 @@ if __name__ == "__main__":
     T = 5.27  # Total time
     plot = False
     plot_armijo = False
-    dt = 1e-4
+    dt = 1e-3
     
     # Initialize system
-    arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, method='euler')
+    arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, method='rk')
     cost = Cost(Q1, R1, QT1)
     
     # Create reference trajectory

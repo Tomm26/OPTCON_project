@@ -25,7 +25,7 @@ class FlexibleRobotAnimator:
         self.ax.set_title('Flexible Robotic Arm Animation')
         
         # Initialize robot components
-        self.line, = self.ax.plot([], [], 'b-', lw=3, label='Robot Arms')
+        self.line, = self.ax.plot([], [], 'b-', lw=4, label='Robot Arms')
         self.joints = [Circle((0, 0), 0.1, fc='k'),
                       Circle((0, 0), 0.1, fc='r'),
                       Circle((0, 0), 0.1, fc='r')]
@@ -35,7 +35,7 @@ class FlexibleRobotAnimator:
             self.ax.add_patch(joint)
             
         # Add trajectory trace
-        self.trace, = self.ax.plot([], [], 'g--', alpha=0.5, label='End Effector Trace')
+        self.trace, = self.ax.plot([], [], 'g--', alpha=0.5, label='End Effector Trace',lw=2.2)
         self.trace_x = []
         self.trace_y = []
         

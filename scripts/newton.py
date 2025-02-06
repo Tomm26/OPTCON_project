@@ -418,11 +418,11 @@ class NewtonOptimizer:
             
             # Plot optimization iterations with increasing opacity
             for k in range(iterations):
-                alpha = 0.2 + 0.8 * (k / (iterations - 1))
+                alpha = 0.1 + 0.6 * (k / (iterations - 1))
                 ax.plot(range(TT), xx[i, :, k], 'b-', alpha=alpha, linewidth=1)
             
             # Plot final trajectory
-            ax.plot(range(TT), xx[i, :, -1], 'g-', label='Optimized', linewidth=2)
+            ax.plot(range(TT), xx[i, :, -1], 'g-', label='Optimized', linewidth=3)
             
             ax.set_xlabel('Time step')
             ax.set_ylabel(f'{state_labels[i]}')
