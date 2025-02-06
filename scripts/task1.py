@@ -3,7 +3,7 @@ from dynamics import FlexibleRoboticArm
 from cost import Cost
 from traj import TrajectoryGenerator, TrajectoryType
 from newton import NewtonOptimizer
-from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters
+from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, ns, ni, fixed_stepsize, stepsize_0, cc, beta, armijo_maxiters
 from parameters import Q1, R1, QT1
 from utils import generate_u_ref
 from animate import FlexibleRobotAnimator
@@ -11,12 +11,13 @@ from matplotlib import pyplot as plt
 
 if __name__ == "__main__":
 
-    T = 3.0  # Total time
+    T = 5.27  # Total time
     plot = False
     plot_armijo = False
+    dt = 1e-4
     
     # Initialize system
-    arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, method='rk')
+    arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni, method='euler')
     cost = Cost(Q1, R1, QT1)
     
     # Create reference trajectory

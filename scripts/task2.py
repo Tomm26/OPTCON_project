@@ -60,7 +60,7 @@ if __name__ == "__main__":
     print('Optimizing...\n')
     x_optimal, u_optimal, costs = optimizer.newton_optimize(x_ref, u_ref, 
                                             max_iters=40, 
-                                            threshold_grad=1e-6,
+                                            threshold_grad=1e-3,
                                             use_armijo=True,
                                             show_plots_armijo=plot_armijo)
 

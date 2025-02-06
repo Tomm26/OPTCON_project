@@ -107,7 +107,7 @@ class NewtonOptimizer:
         Optimized version using vectorized operations.
         """
         # Generate uniform stepsize grid (ridotto il numero di punti)
-        steps = np.linspace(0, stepsize_0, 10)  # Ridotto da 20 a 10 punti
+        steps = np.linspace(0, stepsize_0, 40)  # Ridotto da 20 a 10 punti
         costs = np.zeros(len(steps))
 
         # Pre-allocate arrays for all steps at once
