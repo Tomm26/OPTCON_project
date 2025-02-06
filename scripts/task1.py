@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 
 if __name__ == "__main__":
 
-    T = 3.5  # Total time
+    T = 3.0  # Total time
     plot = False
     plot_armijo = False
     
