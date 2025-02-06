@@ -12,7 +12,7 @@ from matplotlib import pyplot as plt
 
 if __name__ == "__main__":
 
-    T = 15.0  # Total time
+    T = 20.0  # Total time 
     plot = False
     plot_armijo = False
     save_traj = True
@@ -24,7 +24,7 @@ if __name__ == "__main__":
     # Create reference trajectory
     x_waypoints = np.array([
         [0, 0, 0, 0], 
-        [np.deg2rad(45), -np.deg2rad(45), 0, 0],
+        [np.deg2rad(60), -np.deg2rad(60), 0, 0],
         [-np.deg2rad(70), np.deg2rad(70), 0, 0],
         [np.deg2rad(90), -np.deg2rad(90), 0, 0]
     ])

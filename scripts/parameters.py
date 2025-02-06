@@ -25,7 +25,7 @@ R1 = 0.0005*np.eye(1)
 QT1 = None
 
 # Task2
-Q2 = np.diag([15.0, 15.0, 1.0, 1.0])
+Q2 = np.diag([15.0, 30.0, 1.0, 1.0])
 R2 = 0.0005*np.eye(1)
 QT2 = None
 
