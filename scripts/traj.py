@@ -10,75 +10,75 @@ class TrajectoryType(Enum):
 
 class TrajectoryGenerator:
     """
-    Classe per generare e plottare traiettorie multi-dimensionali.
+    Class for generating and plotting multi-dimensional trajectories.
     
-    Ora si assume che xPoints abbia forma (p, n) in input, 
-    cioè p punti (righe) e n dimensioni (colonne).
-    Nel costruttore, xPoints viene trasposta a (n, p).
+    It is assumed that the input xPoints has shape (p, n), i.e.,
+    p points (rows) and n dimensions (columns).
+    In the constructor, xPoints is transposed to (n, p).
 
-    tPoints deve avere dimensione (p,):
-       - tempi associati ai p punti
-    T  : tempo totale
-    dt : passo di campionamento
+    tPoints must have shape (p,):
+       - times associated with the p points
+    T  : total time
+    dt : sampling time
     
-    Metodi di interpolazione disponibili:
+    Available interpolation methods:
         - exponential
         - cubic
         - step
     """
 
     def __init__(self, xPoints, tPoints, T, dt):
-        # Converto in array numpy e TRASPORRE xPoints 
-        # (adesso la forma diventa (n, p) internamente)
+        # Convert to a numpy array and TRANSPOSE xPoints 
+        # (now the shape becomes (n, p) internally)
         self.xPoints = np.array(xPoints, dtype=float).T  
         self.tPoints = np.array(tPoints, dtype=float)
         self.T       = float(T)
         self.dt      = float(dt)
 
-        # Controlli base
+        # Basic checks
         if len(self.tPoints.shape) != 1:
-            raise ValueError("tPoints deve essere un vettore monodimensionale.")
+            raise ValueError("tPoints must be a one-dimensional vector.")
         if len(self.xPoints.shape) != 2:
-            raise ValueError("xPoints, dopo la trasposizione, deve essere un array bidimensionale.")
+            raise ValueError("xPoints, after transposition, must be a 2D array.")
         
         p1 = self.xPoints.shape[1]
         p2 = self.tPoints.shape[0]
         if p1 != p2:
-            raise ValueError("Dopo la trasposizione, il numero di colonne di xPoints deve coincidere con la lunghezza di tPoints.")
+            raise ValueError("After transposition, the number of columns of xPoints must match the length of tPoints.")
         
         if self.tPoints[0] < 0 or self.tPoints[-1] > self.T:
-            raise ValueError("I tempi in tPoints devono essere compresi in [0, T].")
+            raise ValueError("The times in tPoints must be within [0, T].")
         if self.dt <= 0:
-            raise ValueError("dt deve essere positivo.")
+            raise ValueError("dt must be positive.")
 
-        # Numero dimensioni e numero punti
-        self.n = self.xPoints.shape[0]  # dimensioni (righe)
-        self.p = self.xPoints.shape[1]  # punti noti (colonne)
+        # Number of dimensions and number of known points
+        self.n = self.xPoints.shape[0]  # dimensions (rows)
+        self.p = self.xPoints.shape[1]  # known points (columns)
 
     def generate_trajectory(self, traj_type=TrajectoryType.EXPONENTIAL):
         """
-        Genera la traiettoria campionata (X_array, t_array) in base al tipo richiesto.
+        Generates the sampled trajectory (X_array, t_array) based on the requested type.
         
-        Parametri:
-        ----------
+        Parameters:
+        -----------
         traj_type : TrajectoryType
-            Uno dei valori in [EXPONENTIAL, CUBIC, STEP]
+            One of the values in [EXPONENTIAL, CUBIC, STEP]
         
-        Ritorna:
+        Returns:
         --------
         (X_array, t_array) : (np.ndarray, np.ndarray)
-            X_array: matrice (n, N) di valori di x per ciascuna dimensione
-                     (n = numero dimensioni, N = numero di campioni)
-            t_array: vettore dei tempi corrispondenti (lunghezza N)
+            X_array: a matrix of shape (n, N) containing the values of x for each dimension
+                     (n = number of dimensions, N = number of samples)
+            t_array: a vector of the corresponding times (length N)
         """
-        # Vettore dei tempi regolare
+        # Regular time vector
         t_array = np.arange(0, self.T, self.dt)
         N = len(t_array)
 
-        # Matrice per i valori di x di ogni dimensione (n righe, N colonne)
+        # Matrix for x values for each dimension (n rows, N columns)
         X_array = np.zeros((self.n, N))
 
-        # Interpoliamo su ciascun intervallo [tPoints[j], tPoints[j+1]]
+        # Interpolate on each interval [tPoints[j], tPoints[j+1]]
         for j in range(self.p - 1):
             t1 = self.tPoints[j]
             t2 = self.tPoints[j+1]
@@ -90,11 +90,11 @@ class TrajectoryGenerator:
                 v1 = self.xPoints[i, j]
                 v2 = self.xPoints[i, j+1]
 
-                # Se i due punti coincidono, valore costante
+                # If the two points are the same, use a constant value
                 if v1 == v2:
                     X_array[i, idx_start:idx_end] = v1
                 else:
-                    # Calcoliamo la sotto-traiettoria (x_loc, t_loc)
+                    # Compute the sub-trajectory (x_loc, t_loc)
                     if traj_type == TrajectoryType.EXPONENTIAL:
                         x_loc, t_loc = self._exponential_segment(t1, t2, v1, v2)
                     elif traj_type == TrajectoryType.CUBIC:
@@ -102,13 +102,13 @@ class TrajectoryGenerator:
                     elif traj_type == TrajectoryType.STEP:
                         x_loc, t_loc = self._step_segment(t1, t2, v1, v2)
                     else:
-                        raise ValueError("Tipo di traiettoria non riconosciuto.")
+                        raise ValueError("Trajectory type not recognized.")
 
-                    # Riempiamo gli indici corrispondenti
+                    # Fill in the corresponding indices
                     seg_len = min(idx_end - idx_start, len(x_loc))
                     X_array[i, idx_start:idx_start + seg_len] = x_loc[:seg_len]
 
-        # Se l'ultimo tempo definito < T, proseguiamo costante con l'ultimo valore
+        # If the last defined time is less than T, continue with the last value
         last_idx = np.searchsorted(t_array, self.tPoints[-1])
         for i in range(self.n):
             last_val = self.xPoints[i, -1]
@@ -118,40 +118,40 @@ class TrajectoryGenerator:
 
     def plot_trajectory(self, traj_type=TrajectoryType.EXPONENTIAL, show_points=True):
         """
-        Genera la traiettoria e la plotta in sottografici distinti,
-        uno per ogni dimensione (riga) di xPoints.
+        Generates the trajectory and plots it in separate subplots,
+        one for each dimension (row) of xPoints.
         
-        Parametri:
-        ----------
+        Parameters:
+        -----------
         traj_type   : TrajectoryType
-            Tipo di traiettoria da generare (default: EXPONENTIAL)
+            Type of trajectory to generate (default: EXPONENTIAL)
         show_points : bool
-            Se True, mostra con scatter i punti noti per ogni dimensione.
+            If True, show the known points for each dimension using scatter.
         """
-        # Generiamo la traiettoria
+        # Generate the trajectory
         X_array, t_array = self.generate_trajectory(traj_type)
         X_array = X_array.T
 
         fig, axs = plt.subplots(self.n, 1, figsize=(8, 2*self.n), sharex=True)
         if self.n == 1:
-            axs = [axs]  # Per gestire il caso di una sola dimensione
+            axs = [axs]  # To handle the case of a single dimension
 
         for i in range(self.n):
             ax = axs[i]
-            ax.plot(t_array, X_array[i, :], label=f"Dimensione {i+1}", lw=2)
+            ax.plot(t_array, X_array[i, :], label=f"Dimension {i+1}", lw=2)
 
             if show_points:
-                # i punti noti corrispondono a self.xPoints[i, :] 
+                # The known points correspond to self.xPoints[i, :]
                 ax.scatter(self.tPoints, self.xPoints[i, :],
                            facecolor='none', edgecolor='k', zorder=10, s=50, 
-                           label=f"Punti noti dim {i+1}")
+                           label=f"Known points dim {i+1}")
 
             ax.set_ylabel(f"x[{i}]")
             ax.grid(True)
             ax.legend()
 
-        fig.suptitle(f"Traiettoria tipo: {traj_type.value}", fontsize=14)
-        axs[-1].set_xlabel("Tempo [s]")
+        fig.suptitle(f"Trajectory type: {traj_type.value}", fontsize=14)
+        axs[-1].set_xlabel("Time [s]")
         plt.tight_layout()
         plt.show()
 
@@ -182,33 +182,7 @@ class TrajectoryGenerator:
         if (t2 - t1) < 1e-8:
             return (np.array([v1]), np.array([t1]))
 
-        # Rimaniamo a v1 per tutto l'intervallo [t1, t2)
+        # Remain at v1 for the entire interval [t1, t2)
         x_loc = np.full_like(t_loc, v1)
         return x_loc, t_loc
 
-
-# ============== ESEMPIO D'USO ===================
-if __name__ == "__main__":
-
-    # Abbiamo p=3 punti (righe) in n=3 dimensioni (colonne).
-    # Ciascuna riga rappresenta un punto nello spazio 3D:
-    xPoints = [
-        [0.0, 0.0, 0.0],   # 1° punto (p=1)
-        [5.0, 3.0, 1.0],   # 2° punto (p=2)
-        [2.0, 0.0, 0.0]    # 3° punto (p=3)
-    ]
-
-    # Tempi corrispondenti ai punti di cui sopra
-    tPoints = [0.0, 2.0, 4.0]
-
-    # Tempo totale della traiettoria e passo di campionamento
-    T  = 6.0
-    dt = 0.01
-
-    # Istanzio il generatore di traiettorie
-    gen = TrajectoryGenerator(xPoints, tPoints, T, dt)
-
-    # Eseguo il plot con diversi tipi di interpolazione
-    gen.plot_trajectory(traj_type=TrajectoryType.CUBIC)
-    gen.plot_trajectory(traj_type=TrajectoryType.STEP)
-    gen.plot_trajectory(traj_type=TrajectoryType.EXPONENTIAL)

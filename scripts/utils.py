@@ -2,7 +2,7 @@ import numpy as np
 from dynamics import FlexibleRoboticArm
 
 
-def generate_u_ref(arm:FlexibleRoboticArm, x_traj, max_iter=100, step_size=0.1, tol=1e-4):
+def generate_u_ref(arm:FlexibleRoboticArm, x_traj):
     """
     Gravity Compensation
     """
@@ -12,7 +12,5 @@ def generate_u_ref(arm:FlexibleRoboticArm, x_traj, max_iter=100, step_size=0.1, 
     for t in range(T):
                 
         u_traj[t] =  (arm.gravity_vector(x_traj[t][0], x_traj[t][1]))[0]
-
-        
         
     return u_traj

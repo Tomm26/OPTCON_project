@@ -91,14 +91,15 @@ class LQRController(ControllerBase):
         return xx, uu
 
 class MPCController(ControllerBase):
-    """Implementazione MPC con costo sullo stato esplicito (senza vincoli sugli input)."""
+    """MPC implementation with an explicit state cost (without input constraints)."""
+
     def __init__(self, arm: FlexibleRoboticArm, Q: np.ndarray, R: np.ndarray, N: int,
                  Qf: np.ndarray = None):
         """
-        :param Q: Matrice di costo sullo stato
-        :param R: Matrice di costo sull'input
-        :param N: Lunghezza dell'orizzonte predittivo
-        :param Qf: Matrice di costo terminale (se None, si usa Q)
+        :param Q: State cost matrix
+        :param R: Input cost matrix
+        :param N: Length of the predictive horizon
+        :param Qf: Terminal cost matrix (if None, Q is used)
         """
         super().__init__(arm)
         self.Q = Q
@@ -108,26 +109,26 @@ class MPCController(ControllerBase):
 
     def formulate_qp_matrices(self, AA: np.ndarray, BB: np.ndarray, x0: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Costruisce la matrice Hessiana H e il vettore lineare f per il problema
-        considerando il costo:
+        Constructs the Hessian matrix H and the linear vector f for the problem,
+        considering the cost:
             J = sum_{i=0}^{N-1} [ x_{i+1}^T Q x_{i+1} + u_i^T R u_i ] + x_{N+1}^T Qf x_{N+1}
-        e la dinamica:
+        and the dynamics:
             x_{i+1} = A_i x_i + B_i u_i.
-        Si elimina la variabile stato ottenendo una formulazione in funzione degli input.
+        The state variable is eliminated to obtain a formulation in terms of the inputs.
         """
         m = self.ni
         n = self.ns
         N = self.N
 
-        # Calcola la traiettoria nominale propagando x0 con u = 0.
+        # Compute the nominal trajectory by propagating x0 with u = 0.
         x_nom = np.zeros((n, N+1))
         x_nom[:, 0] = x0
         for i in range(N):
             x_nom[:, i+1] = AA[:, :, i] @ x_nom[:, i]
 
-        # Costruzione delle matrici di sensibilità S_i tali che:
+        # Construct the sensitivity matrices S_i such that:
         #   x_i = x_nom[:, i] + S_i * U,
-        # dove U è il vettore impilato degli input.
+        # where U is the stacked vector of inputs.
         S = []
         for i in range(N+1):
             S_i = np.zeros((n, N * m))
@@ -138,19 +139,19 @@ class MPCController(ControllerBase):
                 S_i[:, j*m:(j+1)*m] = prod @ BB[:, :, j]
             S.append(S_i)
 
-        # Inizializza la Hessiana H e il vettore f (costo espresso come U^T H U + 2 f^T U)
+        # Initialize the Hessian H and the vector f (cost expressed as U^T H U + 2 f^T U)
         H = np.zeros((N * m, N * m))
         f = np.zeros((N * m, 1))
 
-        # Accumula il costo per i passi intermedi
+        # Accumulate the cost for the intermediate steps
         for i in range(1, N):
             H += S[i].T @ self.Q @ S[i]
             f += S[i].T @ (2 * self.Q @ x_nom[:, i]).reshape(-1, 1)
-        # Aggiunge il costo terminale
+        # Add the terminal cost
         H += S[N].T @ self.Qf @ S[N]
         f += S[N].T @ (2 * self.Qf @ x_nom[:, N]).reshape(-1, 1)
 
-        # Aggiunge il costo sull'input per ogni istante
+        # Add the input cost for each time step
         for i in range(N):
             idx = slice(i * m, (i+1) * m)
             H[idx, idx] += self.R
@@ -159,38 +160,38 @@ class MPCController(ControllerBase):
 
     def solve_mpc(self, x0: np.ndarray, AA: np.ndarray, BB: np.ndarray) -> np.ndarray:
         """
-        Risolve il problema QP a orizzonte finito.
-        :param x0: stato iniziale (errore rispetto al riferimento)
-        :param AA: array di matrici A lungo l'orizzonte (dimensione: ns x ns x N)
-        :param BB: array di matrici B lungo l'orizzonte (dimensione: ns x ni x N)
-        :return: Sequenza ottimale degli input
+        Solves the finite horizon QP problem.
+        :param x0: Initial state (error with respect to the reference)
+        :param AA: Array of A matrices along the horizon (dimensions: ns x ns x N)
+        :param BB: Array of B matrices along the horizon (dimensions: ns x ni x N)
+        :return: Optimal sequence of inputs
         """
         H, f = self.formulate_qp_matrices(AA, BB, x0)
-        # Nessun vincolo sugli input: si risolve il QP senza vincoli
+        # No constraints on the inputs: solve the QP without constraints
         sol = solvers.qp(matrix(H), matrix(f))
         
         if sol['status'] != 'optimal':
-            raise RuntimeError("Il risolutore QP MPC non ha convergito a soluzione ottimale")
+            raise RuntimeError("The MPC QP solver did not converge to an optimal solution")
             
         U_opt = np.array(sol['x']).reshape(-1, self.ni)
         return U_opt
 
     def simulate(self, x_ref: np.ndarray, u_ref: np.ndarray, 
                  disturbances: Dict) -> Tuple[np.ndarray, np.ndarray]:
-        """Simula il sistema con controllo MPC"""
+        """Simulates the system with MPC control"""
         TT = x_ref.shape[1] - self.N
 
         xx = np.zeros((self.ns, TT))
         uu = np.zeros((self.ni, TT-1))
         
-        # Imposta la condizione iniziale (eventuale perturbazione)
+        # Set the initial condition (with potential perturbation)
         x0_perturb = disturbances.get("x0_perturb", np.zeros(self.ns))
         if disturbances.get("perturbed_state", False):
             xx[:, 0] = x_ref[:, 0] + x0_perturb
         else:
             xx[:, 0] = x_ref[:, 0]
 
-        # Pre-calcola le matrici di linearizzazione per l'intera traiettoria richiesta
+        # Pre-calculate the linearization matrices for the entire required trajectory
         AA = np.zeros((self.ns, self.ns, TT + self.N))
         BB = np.zeros((self.ns, self.ni, TT + self.N))
         for t in range(TT + self.N):
@@ -199,12 +200,12 @@ class MPCController(ControllerBase):
             BB[:, :, t] = np.array(B_t, dtype=float)
 
         for t in range(TT-1):
-            # Calcola l'errore di stato (rispetto al riferimento)
+            # Calculate the state error (with respect to the reference)
             x_error = xx[:, t] - x_ref[:, t]
             
             U_opt = self.solve_mpc(x_error, AA[:, :, t:t+self.N], BB[:, :, t:t+self.N])
             
-            # Applica il primo comando ottimale sommato al riferimento
+            # Apply the first optimal command added to the reference input
             uu[:, t] = U_opt[0] + u_ref[:, t]
             
             xx[:, t+1] = self.arm.discrete_dynamics(xx[:, t], uu[:, t])
@@ -218,8 +219,6 @@ class MPCController(ControllerBase):
                 xx[:, t+1] += noise
 
         return xx, uu
-
-
 
 class SimulationManager:
     """Manages simulation execution and results visualization"""
@@ -277,7 +276,7 @@ class SimulationManager:
         return mpc.simulate(x_ref, u_ref, disturbances)
     
     def plot_comparison(self, x_ref: np.ndarray, u_ref: np.ndarray, 
-                    results: Dict, save_plots: bool = True):
+                    results: Dict, save_plots: bool = False):
         """Plot comparison of LQR and MPC results"""
         # Find the minimum length among all trajectories
         T_ref = x_ref.shape[1]
@@ -350,7 +349,7 @@ class SimulationManager:
     
     def plot_single(self, x_ref: np.ndarray, u_ref: np.ndarray, 
                     result: Tuple[np.ndarray, np.ndarray], controller_name: str,
-                    save_plot: bool = True):
+                    save_plot: bool = False):
         """Plot simulation results for a single controller"""
         xx, uu = result
         T_ref = x_ref.shape[1]

@@ -106,8 +106,8 @@ class NewtonOptimizer:
         Plots the cost as a function of the stepsize in the Armijo rule.
         Optimized version using vectorized operations.
         """
-        # Generate uniform stepsize grid (ridotto il numero di punti)
-        steps = np.linspace(0, stepsize_0, 40)  # Ridotto da 20 a 10 punti
+        # Generate uniform stepsize grid
+        steps = np.linspace(0, stepsize_0, 40)
         costs = np.zeros(len(steps))
 
         # Pre-allocate arrays for all steps at once

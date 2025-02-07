@@ -14,6 +14,7 @@ if __name__ == "__main__":
     T = 5.27  # Total time
     plot = False
     plot_armijo = False
+    
     dt = 1e-3
     
     # Initialize system

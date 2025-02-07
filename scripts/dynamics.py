@@ -3,7 +3,6 @@ from scipy.integrate import solve_ivp
 import sympy as sy
 from typing import Tuple
 import numpy.typing as npt
-from parameters import m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni
 
 class FlexibleRoboticArm:
     def __init__(self, m1: float, m2: float, l1: float, l2: float, r1: float, r2: float, 
@@ -291,41 +290,3 @@ class FlexibleRoboticArm:
         
         self._lambda_grad = sy.lambdify(self._sym_vars, self._sym_grad, modules='numpy')
         self._lambda_grad_u = sy.lambdify(self._sym_vars, self._sym_grad_u, modules='numpy')
-
-
-if __name__ == "__main__":
-    # Create an instance of the FlexibleRoboticArm
-    arm = FlexibleRoboticArm(m1, m2, l1, l2, r1, r2, I1, I2, g, f1, f2, dt, ns, ni)
-    
-    # Initial state: [theta1, theta2, dtheta1, dtheta2]
-    x0 = [np.pi/4, np.pi/4, 0.0, 0.0]
-    u = [1.0]  # Input torque
-    
-    # Test 1: Basic dynamics
-    x_next = arm.discrete_dynamics(x0, u)
-    print("Test 1 - Next state (x0 = [0, 0, 0, 0], u = 1):\n", x_next)
-    
-    # # Test 2: Different initial state
-    # x0 = [0.1, -0.1, 0.5, -0.5]
-    # x_next = arm.discrete_dynamics(x0, u)
-    # print("Test 2 - Next state (x0 = [0.1, -0.1, 0.5, -0.5], u = 1):", x_next)
-    
-    # # Test 3: Zero input torque
-    # x0 = [0.0, 0.0, 0.0, 0.0]
-    # u = [0.0]
-    # x_next = arm.discrete_dynamics(x0, u)
-    # print("Test 3 - Next state (x0 = [0, 0, 0, 0], u = 0):", x_next)
-    
-    # # Test 4: Steady-state response
-    # x0 = [np.pi/4, np.pi/4, 0.0, 0.0]
-    # u = [5.0]
-    # x_next = arm.discrete_dynamics(x0, u)
-    # print("Test 4 - Next state (x0 = [pi/4, pi/4, 0, 0], u = 5):", x_next)
-    
-    # Test 5: Gradients at a specific state
-    # x0 = [0.0, 0.0, 0.0, 0.0]
-    # u = [1.0]
-    grad_x, grad_u = arm.get_gradients(x0, u)
-    # print("Test 5 - Gradients at x0 =\n", x0, "\nand u =\n", u)
-    print("    Gradient wrt state (grad_x):\n", grad_x)
-    print("    Gradient wrt input (grad_u):\n", grad_u)
